@@ -125,7 +125,7 @@ pub const MENU: &[(&str, &str)] = &[
 /// Pages that are APIs as well (other tools call them with `format=json`
 /// and such), so their old address answers directly instead of redirecting.
 const ALSO_AT_OLD_ADDRESS: &[&str] =
-    &["get_item_names", "related_properties", "resolver", "sparql_rc", "user_edits", "wikidata_cache"];
+    &["get_item_names", "pagepile2kml", "related_properties", "resolver", "sparql_rc", "user_edits", "wikidata_cache"];
 
 pub fn routes(state: &State) -> Router<State> {
     let router = Router::new().route("/", get(index::handler)).route("/index.php", get(index::handler));
