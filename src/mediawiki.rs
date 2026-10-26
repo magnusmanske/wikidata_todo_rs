@@ -18,6 +18,30 @@ pub async fn api(http: &reqwest::Client, wiki: &Wiki, params: &[(&str, &str)]) -
         .with_context(|| format!("API response from {wiki} is not JSON"))
 }
 
+/// As [`api`], but asks again, after a while, when the wiki says there are
+/// too many requests (429): for tools that make many in a row.
+pub async fn api_patiently(http: &reqwest::Client, wiki: &Wiki, params: &[(&str, &str)]) -> Result<Value> {
+    const RETRIES: u32 = 4;
+    let mut wait = std::time::Duration::from_secs(1);
+    for _ in 0..RETRIES {
+        match api(http, wiki, params).await {
+            Err(e) if is_too_many_requests(&e) => {
+                tokio::time::sleep(wait).await;
+                wait *= 2;
+            }
+            result => return result,
+        }
+    }
+    api(http, wiki, params).await
+}
+
+fn is_too_many_requests(e: &anyhow::Error) -> bool {
+    e.chain().any(|cause| {
+        cause.downcast_ref::<reqwest::Error>().and_then(reqwest::Error::status)
+            == Some(reqwest::StatusCode::TOO_MANY_REQUESTS)
+    })
+}
+
 /// The current wikitext of a page, following redirects; `None` if there is no such page.
 pub async fn page_wikitext(http: &reqwest::Client, wiki: &Wiki, title: &str) -> Result<Option<String>> {
     let params = [
