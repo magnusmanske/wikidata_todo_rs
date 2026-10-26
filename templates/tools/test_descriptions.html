@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Random items, with their automatic description (from <a href="https://autodesc.toolforge.org/">AutoDesc</a>) next to their manual one, for comparison.</p>
+<form method="get" action="/test_descriptions/">
+  <div class="row">
+    <label>Language
+      <select name="lang">
+      {% for l in languages %}<option value="{{ l }}"{% if *l == language %} selected{% endif %}>{{ l }}{% if *l != "en" && *l != "de" %} (partially translated){% endif %}</option>
+      {% endfor %}
+      </select></label>
+    <label>Number of items <span class="hint">at most {{ max_items }}</span>
+      <input type="number" name="noi" min="1" max="{{ max_items }}" value="{{ items }}"></label>
+  </div>
+  <button name="doit" value="1">Run</button>
+</form>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Item</th><th>Automatic</th><th>Manual</th></tr></thead>
+  <tbody>
+{% for row in rows %}
+  <tr><td><a href="https://www.wikidata.org/wiki/{{ row.item }}">{{ row.label }}</a></td>
+  <td style="white-space: pre-line">{{ row.automatic }}</td><td>{{ row.manual }}</td></tr>
+{% endfor %}
+  </tbody>
+  <tfoot>
+  <tr><th>Description present</th><td class="num">{{ stats.present.0 }}</td><td class="num">{{ stats.present.1 }}</td></tr>
+  <tr><th>Words</th><td class="num">{{ stats.words.0 }}</td><td class="num">{{ stats.words.1 }}</td></tr>
+  <tr><th>Characters</th><td class="num">{{ stats.chars.0 }}</td><td class="num">{{ stats.chars.1 }}</td></tr>
+  <tr><th>Both descriptions identical</th><td colspan="2" class="num">{{ stats.identical }}</td></tr>
+  </tfoot>
+</table>
+</div>
+{% endblock %}

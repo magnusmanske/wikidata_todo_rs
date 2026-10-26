@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The items of a <a href="https://pagepile.toolforge.org/">PagePile</a> that have coordinates, as KML, for Google Earth and other map tools.</p>
+<form method="get" action="/pagepile2kml/">
+  <label>PagePile ID <input type="number" name="pagepile" min="1" placeholder="253" required></label>
+  <button>Generate KML</button>
+</form>
+<p>Example: <a href="/pagepile2kml/?pagepile=253">PagePile #253</a>.</p>
+<p class="hint">Piles of Wikipedia pages work too, through their Wikidata items. At most {{ max_items }} items per pile.</p>
+{% endblock %}

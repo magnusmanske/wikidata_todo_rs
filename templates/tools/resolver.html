@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Redirects to a Wikidata item, by a string value (such as an external ID) of a property.</p>
+{% if let Some(error) = error %}<p class="error">{{ error }}</p>{% endif %}
+{% if let Some(found) = found %}
+{% if found.items.is_empty() %}
+<p class="error">No item has {{ found.property }} “{{ found.value }}”.</p>
+{% else %}
+<h2>Items with {{ found.property }} “{{ found.value }}”</h2>
+<ol>
+{% for (label, item) in found.items %}<li><a href="https://www.wikidata.org/wiki/{{ item }}">{{ label }}</a> <span class="muted">{{ item }}</span></li>
+{% endfor %}
+</ol>
+{% endif %}
+{% endif %}
+<form method="get" action="/resolver/">
+  <div class="row">
+    <label>Property <input type="text" name="prop" value="{{ property }}" placeholder="P227" required></label>
+    <label>Value <input type="text" name="value" value="{{ request.value }}" placeholder="119186187" required></label>
+  </div>
+  <label>Wiki or tool to open instead of Wikidata <span class="hint">e.g. enwiki, reasonator</span>
+    <input type="text" name="project" value="{{ request.project }}"></label>
+  <label class="check"><input type="checkbox" name="no_autoload" value="1"{% if !request.no_autoload.is_empty() %} checked{% endif %}> Just show the items instead of opening one</label>
+  <button>Find the item</button>
+</form>
+<h2>Quick lookup</h2>
+<form method="get" action="/resolver/">
+  <label>Property name and value <span class="hint">the start of the property's English label, a colon, and the value; e.g. <a href="/resolver/?quick=VIAF:12307054&amp;no_autoload=1">VIAF:12307054</a></span>
+    <input type="text" name="quick" value="{{ request.quick }}" placeholder="VIAF:12307054" required></label>
+  <label>Wiki or tool to open instead of Wikidata <span class="hint">e.g. enwiki, reasonator</span>
+    <input type="text" name="project" value="{{ request.project }}"></label>
+  <label class="check"><input type="checkbox" name="no_autoload" value="1"{% if !request.no_autoload.is_empty() %} checked{% endif %}> Just show the items instead of opening one</label>
+  <button>Find the item</button>
+</form>
+{% if !tools.is_empty() %}
+<p class="hint">Tools to open the item in: {% for tool in tools %}<code>{{ tool }}</code>{% if !loop.last %}, {% endif %}{% endfor %}.</p>
+{% endif %}
+{% endblock %}

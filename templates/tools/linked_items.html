@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The Wikidata items of the articles that a page, some pages, or a piece of wikitext link to; or of the pages in a PagePile.</p>
+<form method="post" action="/linked_items/">
+  <div class="row">
+    <label>Language <input type="text" name="language" value="{{ request.language }}" required></label>
+    <label>Project <input type="text" name="project" value="{{ request.project }}" required></label>
+  </div>
+  <label>Page <input type="text" name="page" value="{{ request.page }}"></label>
+  <label>or pages <span class="hint">one per line, at most {{ max_pages }}</span>
+    <textarea name="pages" rows="5">{{ request.pages }}</textarea></label>
+  <label>or wikitext <textarea name="wikitext" rows="8">{{ request.wikitext }}</textarea></label>
+  <label>or a PagePile <span class="hint">instead of all the above; its own wiki counts</span>
+    <input type="number" name="pagepile" value="{{ request.pagepile }}" placeholder="PagePile ID"></label>
+  <label class="check"><input type="checkbox" name="ignore_templates" value="1"{% if request.ignore_templates.is_some() %} checked{% endif %}> Ignore links inside templates (e.g. navboxes); not for PagePiles</label>
+  <fieldset>
+    <legend>Output</legend>
+    <label class="check"><input type="radio" name="format" value="screen"{% if request.format != "pagepile" %} checked{% endif %}> On screen</label>
+    <label class="check"><input type="radio" name="format" value="pagepile"{% if request.format == "pagepile" %} checked{% endif %}> As a new PagePile</label>
+  </fieldset>
+  <button name="doit" value="1">Find items</button>
+</form>
+{% if let Some(results) = results %}
+<h2>{{ results.items.len() }} items found</h2>
+{% if !results.missing.is_empty() %}<p class="error">No such page: {{ results.missing.join(", ") }}</p>{% endif %}
+{% if let Some((id, url)) = results.pile %}
+<p>Your new PagePile is <a href="{{ url }}">#{{ id }}</a>.</p>
+{% else %}
+<form method="post" action="https://petscan.wmcloud.org/">
+  <label>Items <textarea name="manual_list" rows="10" class="code">{{ results.items.join("\n") }}</textarea></label>
+  <input type="hidden" name="manual_list_wiki" value="wikidatawiki">
+  <button name="doit" value="1">Open in PetScan</button>
+</form>
+<h2>Items and pages</h2>
+<textarea rows="10" class="code" readonly>{{ results.pairs.join("\n") }}</textarea>
+{% endif %}
+{% endif %}
+{% endblock %}

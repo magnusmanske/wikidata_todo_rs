@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">For each Commons category in a tree: how many files it has, and how many of them Wikidata items use.</p>
+<form method="get" action="/images_in_categories_used_on_commons/">
+  <div class="row">
+    <label>Root category <input type="text" name="category" value="{{ request.category }}" placeholder="Telephone booths in the United Kingdom" required></label>
+    <label>Depth <input type="number" name="depth" min="0" max="10" value="{{ depth }}"></label>
+  </div>
+  <label class="check"><input type="checkbox" name="zero_only" value="1"{% if zero_only %} checked{% endif %}> Only categories with no files used on Wikidata</label>
+  <button>Count</button>
+</form>
+{% if let Some(rows) = rows %}
+<h2>Results</h2>
+{% if rows.is_empty() %}
+<p class="muted">No Commons categories with files match.</p>
+{% else %}
+{% if zero_only %}<p>These Commons categories have files, but none are used on Wikidata (yet).</p>{% endif %}
+<p class="hint">Categories about details and views are left out.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Category</th>{% if !zero_only %}<th class="num">Files used on Wikidata</th>{% endif %}<th class="num">Files in category</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr><td><a href="{{ row.url }}">{{ row.name }}</a></td>{% if !zero_only %}<td class="num">{{ row.used }}</td>{% endif %}<td class="num">{{ row.total }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

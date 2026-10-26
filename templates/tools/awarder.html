@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% macro quickstatements(statements) %}
+<form method="post" action="https://quickstatements.toolforge.org/api.php" target="_blank">
+  <label>Statements <textarea name="data" rows="15" class="code">{{ statements }}</textarea></label>
+  <input type="hidden" name="action" value="import">
+  <input type="hidden" name="format" value="v1">
+  <input type="hidden" name="temporary" value="1">
+  <input type="hidden" name="openpage" value="1">
+  <input type="hidden" name="compress" value="1">
+  <button>Open in QuickStatements</button>
+</form>
+{% endmacro %}
+{% block content %}
+{% if let Some(results) = results %}
+{% match results %}
+{% when Results::Picked { statements } %}
+<h2>Statements</h2>
+{% call quickstatements(statements) %}{% endcall %}
+{% when Results::Awards { person, awards } %}
+<h2>Awards linked from the articles about <a href="https://www.wikidata.org/wiki/{{ person }}">{{ person }}</a></h2>
+<form method="post" action="/awarder/" class="inline">
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th></th><th class="num">Articles</th><th>Award</th><th>Year</th><th></th></tr></thead>
+    <tbody>
+    {% for award in awards %}
+    <tr><td><input type="checkbox" name="use_{{ award.id.trim_start_matches('Q') }}" id="use_{{ award.id }}" aria-label="Use"></td>
+      <td class="num">{{ award.count }}×</td>
+      <td><a href="https://www.wikidata.org/wiki/{{ award.id }}">{{ award.label }}</a></td>
+      <td><input type="text" name="year_{{ award.id.trim_start_matches('Q') }}" placeholder="Year" size="4" data-check="use_{{ award.id }}"></td>
+      <td class="muted">{% if award.in_item %}already in the item{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <input type="hidden" name="q" value="{{ person }}">
+  <input type="hidden" name="aq" value="{% for award in awards %}{{ award.id.trim_start_matches('Q') }}{% if !loop.last %},{% endif %}{% endfor %}">
+  <p><button name="generate" value="1">Generate statements</button></p>
+</form>
+<script>
+// Typing a year ticks the award.
+for (const input of document.querySelectorAll('input[data-check]')) {
+  input.addEventListener('input', () => { document.getElementById(input.dataset.check).checked = true; });
+}
+</script>
+{% when Results::Recipients { award, statements, missing } %}
+{% if !missing.is_empty() %}
+<h2>Recipients without an item</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Year</th><th>Item</th><th></th></tr></thead>
+  <tbody>
+  {% for m in missing %}
+  <tr><th>{{ m.title }}</th><td>{{ m.year }}</td>
+    <td><form class="inline add-item" data-award="{{ award }}" data-year="{{ m.year }}"><input type="text" placeholder="Item, e.g. Q42" size="10" aria-label="Item"> <button title="Adds a statement below, and removes this row">Add</button></form></td>
+    <td><a href="https://www.wikidata.org/w/index.php?title=Special:Search&amp;go=Go&amp;search={{ m.search|urlencode }}">search Wikidata</a></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+<h2>Statements for recipients found</h2>
+{% call quickstatements(statements) %}{% endcall %}
+<script>
+// Adds a statement for an item entered by hand, and removes its row.
+for (const form of document.querySelectorAll('form.add-item')) {
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const q = form.querySelector('input').value.replace(/\D/g, '');
+    if (q === '') { alert('Please enter an item.'); return; }
+    const data = document.querySelector('textarea[name="data"]');
+    const line = `Q${q}\tP166\t${form.dataset.award}\tP585\t+${form.dataset.year}-01-01T00:00:00Z/9`;
+    data.value = (data.value.trim() + '\n' + line).trim();
+    form.closest('tr').remove();
+  });
+}
+</script>
+{% endmatch %}
+{% else %}
+{% if let Some(error) = error %}<p class="error">{{ error }}</p>{% endif %}
+<p class="lead">You have the item of a person with awards (e.g. <a href="/awarder/?q=Q44461">Q44461</a>), and want to add the awards their articles mention:</p>
+<form method="get" action="/awarder/">
+  <label>Item of a person <input type="text" name="q" value="{{ q }}" placeholder="Q44461" required></label>
+  <button>Find awards</button>
+</form>
+<p class="lead">Or you have an article about an award, with a bullet-point list of years and linked recipients (<a href="https://de.wikipedia.org/w/index.php?title=Euler-Medaille&amp;action=edit&amp;section=1">example</a>):</p>
+<form method="post" action="/awarder/">
+  <label>List of recipients, as wikitext <textarea name="wikitext" rows="10" placeholder="* 1999 [[Recipient]]">{{ wikitext }}</textarea></label>
+  <div class="row">
+    <label>Wiki <input type="text" name="wiki" value="{{ wiki }}" placeholder="dewiki" required></label>
+    <label>Item of the award <input type="text" name="q_award" value="{{ q_award }}" placeholder="Q1374593" required></label>
+  </div>
+  <button>Find recipients</button>
+</form>
+{% endif %}
+{% endblock %}
