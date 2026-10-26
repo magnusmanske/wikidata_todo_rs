@@ -208,6 +208,7 @@ fn apis() -> Vec<(&'static str, &'static str, MethodRouter<State>)> {
         ("/api.php", "widar", any_method!(widar::handler)),
         // Static pages here call the Widar of the old shared host.
         ("/widar/index.php", "widar", any_method!(widar::handler)),
+        ("/widar/", "widar", any_method!(widar::handler)),
         ("/canned_queries.php", "canned_queries", any_method!(canned_queries::handler)),
         ("/commons2json.php", "commons2json", any_method!(commons2json::handler)),
         ("/coords2json.php", "coords2json", any_method!(coords2json::handler)),
