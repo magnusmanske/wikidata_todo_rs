@@ -121,7 +121,6 @@ async fn tree(state: &AppState, wiki: &Wiki, request: &Request, namespace: i64) 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::web::test_support::get;
 
     #[tokio::test]

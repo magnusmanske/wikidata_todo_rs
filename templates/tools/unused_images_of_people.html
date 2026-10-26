@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">A random sample of files in the Commons category tree of <a href="https://commons.wikimedia.org/wiki/Category:People">people</a> (two levels deep) that no wiki uses. Perhaps one of them belongs on a Wikidata item, or in an article. Reload for more.</p>
+{% if files.is_empty() %}
+<p class="muted">None found.</p>
+{% else %}
+<div class="thumbs">
+{% for file in files %}<a href="{{ file.url }}" title="{{ file.name }}"><img src="{{ file.thumbnail }}" alt="{{ file.name }}" loading="lazy"></a>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

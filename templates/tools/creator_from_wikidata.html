@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">A Commons Creator template for a Wikidata item.</p>
+<p class="error">Filling in Creator templates with this tool is <a href="https://commons.wikimedia.org/wiki/Template_talk:Creator#Recommendations_for_new_templates">not recommended</a> anymore.</p>
+<form method="get" action="/creator_from_wikidata/">
+  <label>Wikidata item <input type="text" name="q" value="{{ q }}" placeholder="Q42" required autofocus></label>
+  <button>Generate template</button>
+</form>
+{% if let Some(error) = error %}<p class="error">{{ error }}</p>{% endif %}
+{% if let Some(creator) = creator %}
+<h2>Template</h2>
+<textarea class="code" rows="6" readonly>{{ creator.wikitext }}</textarea>
+<p>Copy the text above, then <a href="{{ creator.edit_url }}">paste it here</a>.</p>
+{% endif %}
+{% endblock %}
