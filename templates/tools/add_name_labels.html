@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">For items without a label in one language, copy their label from other languages: QuickStatements commands, for names (of people, say) that are written the same in these languages.</p>
+<form method="get" action="/add_name_labels/">
+  <div class="row">
+    <label>From languages <span class="hint">comma-separated, first one first</span>
+      <input type="text" name="from" value="{{ from }}" required>
+    </label>
+    <label>To language
+      <input type="text" name="to" value="{{ to }}" required>
+    </label>
+  </div>
+  <label>Items <span class="hint">SPARQL query; the first variable holds the items; at most {{ max_items }} are used</span>
+    <textarea name="sparql" rows="4" class="code" required>{{ sparql }}</textarea>
+  </label>
+  <button name="doit" value="1">Make commands</button>
+</form>
+<p class="hint">Items with a <code>mul</code> label (the default for all languages) are left out.</p>
+{% if let Some(results) = results %}
+<h2>{{ results.count }} labels</h2>
+<p class="muted">From {{ results.items }} items.</p>
+{% if results.count > 0 %}
+<form class="inline" onsubmit="return false">
+  <textarea id="commands" rows="16" class="code">{{ results.commands }}</textarea>
+</form>
+<p><a id="qs" href="https://quickstatements.toolforge.org/" target="_blank">Open in QuickStatements</a></p>
+<script>
+// QuickStatements takes v1 commands in the URL fragment, with | for tab and || for newline.
+document.getElementById('qs').addEventListener('click', e => {
+  const commands = document.getElementById('commands').value.trim().replaceAll('\t', '|').replaceAll('\n', '||');
+  e.currentTarget.href = 'https://quickstatements.toolforge.org/#/v1=' + encodeURIComponent(commands);
+});
+</script>
+{% endif %}
+{% endif %}
+{% endblock %}
