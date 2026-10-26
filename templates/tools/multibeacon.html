@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">For values of a key property (an external ID, say), the items that have them, and their values of other properties, as a tab-separated table.</p>
+<form method="post" action="/multibeacon/">
+  <label>Key property <input type="text" name="keyprop" value="{{ request.keyprop }}" placeholder="P214" required></label>
+  <label>Values of the key property <span class="hint">one per line; at most {{ max_values }}</span>
+    <textarea name="values" rows="5">{{ request.values }}</textarea>
+  </label>
+  <label>Columns <span class="hint">one property (Pxxx) per line; the item and the key property are always the first columns</span>
+    <textarea name="columns" rows="3">{{ request.columns }}</textarea>
+  </label>
+  <button>Make table</button>
+</form>
+{% if let Some(output) = output %}
+<h2>Results</h2>
+<textarea class="code" rows="12" readonly>{{ output }}</textarea>
+{% endif %}
+{% endblock %}
