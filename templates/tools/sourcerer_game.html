@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Do these web pages support the statement? Add those that do as references, then mark the statement as done.
+<span id="login" class="muted"></span></p>
+{% if let Some(message) = message %}
+<p class="error">{{ message }}</p>
+<p><a href="/sourcerer_game/">Try another one</a></p>
+{% endif %}
+{% if let Some(game) = game %}
+<h2><a href="https://www.wikidata.org/wiki/{{ game.item }}">{{ game.item_label }}</a> <span class="muted">{{ game.item }}</span></h2>
+<p id="statement" data-id="{{ game.statement }}" data-text="{{ game.text }}"><strong>{{ game.property_label }}</strong>
+<span class="muted">{{ game.property }}</span>: {{ game.text }}</p>
+<p class="row"><button class="done">Done</button> <button class="skip link">Skip</button></p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Source</th><th>Supports the statement?</th></tr></thead>
+  <tbody>
+  {% for source in game.sources %}
+    <tr>
+      <td>{% if let Some(link) = source.link %}<a href="{{ link }}">{{ source.server }}</a>{% else %}{{ source.server }}{% endif %}
+        <span class="muted">{{ source.url }}</span>
+        {% for blurb in source.blurbs %}
+        {#- Escaped, but for the <b> tags (see `highlighted`). #}
+        <p>…{{ blurb|safe }}…</p>
+        {% endfor %}
+      </td>
+      <td>{% if source.link.is_some() %}<button class="add" data-url="{{ source.url }}" data-date="{{ source.date }}">Add as source</button>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="row"><button class="done">Done</button> <button class="skip link">Skip</button></p>
+
+<script>
+// Adds references through Widar (the site's login), and marks the statement done.
+(() => {
+  const { id: statement, text } = document.getElementById('statement').dataset;
+  const here = '/sourcerer_game/';
+  const login = document.getElementById('login');
+  const loginLink = () => {
+    login.innerHTML = '<a href="/api.php?action=authorize&amp;path=sourcerer_game/">Log in</a> to add sources.';
+  };
+  const post = async (url, params) => {
+    const response = await fetch(url, { method: 'POST', body: new URLSearchParams(params) });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return response.json();
+  };
+  // Widar, tried again (a few times) when it says the failure is temporary.
+  async function widar(params, tries = 3) {
+    let answer;
+    for (let i = 0; i < tries; i++) {
+      try {
+        answer = await post('/api.php', { ...params, botmode: 1 });
+        if (answer.error === 'OK' || !answer.transient) return answer;
+      } catch (e) {
+        answer = { error: e.message };
+      }
+      await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+    }
+    return answer;
+  }
+  widar({ action: 'get_rights' }).then(d => {
+    const user = d.result?.query?.userinfo;
+    if (user?.name && user.anon === undefined) login.textContent = 'You are logged in as ' + user.name + '.';
+    else loginLink();
+  });
+  // A reference: the page, and when it was read (`YYYYMMDD`).
+  function snaks(url, date) {
+    const out = { P854: [{ snaktype: 'value', property: 'P854', datavalue: { type: 'string', value: url } }] };
+    const m = date.match(/^(\d{4})(\d\d)(\d\d)$/);
+    if (m) out.P813 = [{ snaktype: 'value', property: 'P813', datavalue: { type: 'time', value: {
+      time: `+${m[1]}-${m[2]}-${m[3]}T00:00:00Z`, timezone: 0, before: 0, after: 0, precision: 11,
+      calendarmodel: 'http://www.wikidata.org/entity/Q1985727' } } }];
+    return out;
+  }
+  for (const button of document.querySelectorAll('button.add')) {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      const d = await widar({ action: 'add_source', statement, snaks: JSON.stringify(snaks(button.dataset.url, button.dataset.date)) });
+      const note = document.createElement('span');
+      if (d.error === 'OK') {
+        note.textContent = 'Source added';
+      } else {
+        note.className = 'error';
+        note.textContent = /authoriz/.test(d.error) ? 'Please log in first.' : d.error;
+        if (/authoriz/.test(d.error)) loginLink();
+      }
+      button.replaceWith(note);
+    });
+  }
+  for (const button of document.querySelectorAll('button.done')) {
+    button.addEventListener('click', async () => {
+      await post(here, { set_done: 1, sid: statement, text }).catch(() => {});
+      location.href = here;
+    });
+  }
+  for (const button of document.querySelectorAll('button.skip')) button.addEventListener('click', () => { location.href = here; });
+})();
+</script>
+{% endif %}
+{% endblock %}
