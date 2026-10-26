@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The login of this site's tools for editing Wikidata under your user name (via OAuth). The tools use it; it has no interface of its own.</p>
+{% if let Some(message) = message %}
+<p class="error">{{ message }}</p>
+{% if let Some(back) = back %}<p><a href="{{ back }}">Back to the tool</a></p>{% endif %}
+{% else %}
+{% if let Some(user) = user %}
+<p>You are logged in as <a href="https://www.wikidata.org/wiki/User:{{ user|urlencode }}">{{ user }}</a>.</p>
+<form method="post" action="{{ script }}" class="inline">
+<input type="hidden" name="action" value="logout">
+<button>Log out</button>
+</form>
+{% else %}
+<p>You are not logged in. <a href="{{ script }}?action=authorize">Log in</a></p>
+{% endif %}
+{% endif %}
+<h2>Tools using it</h2>
+<ul class="tools">
+<li><a href="/duplicity/">Duplicity</a></li>
+<li><a href="/relator2/">Relator</a></li>
+<li><a href="/sourcerer_game/">Sourcerer game</a></li>
+<li><a href="/creator.html">Wikidata item creator</a></li>
+<li><a href="/tabernacle.html">TABernacle</a></li>
+<li><a href="/sourcery.html">Sourcery</a></li>
+<li><a href="/cloudy_concept/">Concept cloud</a></li>
+</ul>
+{% endblock %}
