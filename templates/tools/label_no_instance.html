@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Items with a label that matches a pattern, but no “instance of” or “subclass of” statement.</p>
+<form method="get" action="/label_no_instance/">
+  <div class="row">
+    <label>Language <input type="text" name="lang" value="{{ lang }}" placeholder="e.g. de" required></label>
+    <label>Pattern <span class="hint">SQL <code>LIKE</code>: <code>%</code> for any text, <code>_</code> for one character; not at the start</span>
+      <input type="text" name="pattern" value="{{ pattern }}" placeholder="e.g. Burg %" required>
+    </label>
+  </div>
+  <button name="run" value="1">Find items</button>
+</form>
+{% if let Some(results) = results %}
+<h2>{{ results.items.len() }} items</h2>
+{% if results.capped %}<p class="muted">Only the first {{ max_candidates }} matching labels were looked at.</p>{% endif %}
+{% if !results.items.is_empty() %}
+<form method="post" action="https://petscan.wmcloud.org/" target="_blank">
+  <input type="hidden" name="manual_list_wiki" value="wikidatawiki">
+  <input type="hidden" name="doit" value="1">
+  <label>Items <textarea name="manual_list" rows="8" class="code">{% for (q, _) in results.items %}{{ q }}
+{% endfor %}</textarea></label>
+  <button>Open in PetScan</button>
+</form>
+<ul class="columns">
+{% for (q, label) in results.items %}<li><a href="https://www.wikidata.org/wiki/{{ q }}">{{ label }}</a> <span class="muted">{{ q }}</span></li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endif %}
+{% endblock %}
