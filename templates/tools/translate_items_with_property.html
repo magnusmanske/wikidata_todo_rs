@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The labels and aliases, in all languages, of the items with a string value (an identifier, say) for a property; as tab-separated text.</p>
+<form method="get" action="/translate_items_with_property/">
+  <label>Property <span class="hint">e.g. <code>P227</code>; it must have string values</span>
+    <input type="text" name="prop" placeholder="P227" required>
+  </label>
+  <button>Get the table</button>
+</form>
+<p class="hint">Columns: item, property value, language, type (label or alias), text. Properties used on millions of items may exceed the query service's time limit.</p>
+{% endblock %}
