@@ -59,6 +59,9 @@ struct Cell {
     share: Option<String>,
 }
 
+/// A day's counts: key → (items, query).
+type Counts = HashMap<String, (i64, String)>;
+
 /// `(country, day, key, items, query, main language)`
 type Row = (String, String, String, i64, String, String);
 
@@ -84,8 +87,7 @@ fn countries(rows: Vec<Row>) -> Vec<Country> {
         shares.insert(format!("by_admin_or_coord_no_{language}.wp"), "by_admin_or_coord");
     }
     let mut order: Vec<String> = vec![];
-    // Country → day → key → (items, query)
-    let mut data: HashMap<String, BTreeMap<String, HashMap<String, (i64, String)>>> = HashMap::new();
+    let mut data: HashMap<String, BTreeMap<String, Counts>> = HashMap::new();
     let mut keys: HashMap<String, BTreeSet<String>> = HashMap::new();
     for (country, day, key, items, query, _) in rows {
         if !data.contains_key(&country) {
@@ -98,7 +100,7 @@ fn countries(rows: Vec<Row>) -> Vec<Country> {
         .into_iter()
         .map(|code| {
             let columns: Vec<String> = keys.remove(&code).unwrap_or_default().into_iter().collect();
-            let mut previous: Option<&HashMap<String, (i64, String)>> = None;
+            let mut previous: Option<&Counts> = None;
             let mut days = vec![];
             for (day, counts) in data.get(&code).into_iter().flatten() {
                 let cells = columns
