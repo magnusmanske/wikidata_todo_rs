@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The categories most used by a wiki's articles whose Wikidata items have neither “instance of” (P31) nor “subclass of” (P279): where adding those does the most good.</p>
+<form method="get" action="/best_cats/" class="inline">
+  <div class="row">
+    <label>Wiki <input type="text" name="wiki" value="{{ wiki }}" placeholder="dewiki" required></label>
+    <button>Find categories</button>
+  </div>
+</form>
+{% if let Some(results) = results %}
+<h2>Categories on {{ results.wiki }}</h2>
+<p class="muted">Of {{ results.articles }} articles{% if results.sampled %} (a sample, from random places of the wiki){% endif %},
+{{ results.lacking }} have items without P31 and P279. Hidden and maintenance categories are left out.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Category</th><th class="num">Articles</th></tr></thead>
+  <tbody>
+  {% for (category, count) in results.categories %}
+    <tr><td><a href="{{ results.wiki.page_url(format!("Category:{category}").as_str()) }}">{{ category }}</a></td><td class="num">{{ count }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
