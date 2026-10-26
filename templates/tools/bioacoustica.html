@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The {{ files }} files from BioAcoustica on Commons, by the species in their names, matched to Wikidata taxa by taxon name.</p>
+<p>See also the <a href="https://fist.toolforge.org/file_candidates/#/candidates/?group=TAXON%20AUDIO">file candidates for taxon audio</a>.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Species</th><th>Wikidata item</th><th>Has audio</th><th>Files</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td>{% if let Some(species) = row.species %}<i>{{ species }}</i>{% else %}<span class="muted">Unidentified species</span>{% endif %}</td>
+      <td>{% for taxon in row.taxa %}<a href="https://www.wikidata.org/wiki/{{ taxon.item }}">{{ taxon.item }}</a><br>{% endfor %}</td>
+      <td>{% for taxon in row.taxa %}{% if taxon.has_audio %}yes{% else %}<span class="muted">no</span>{% endif %}<br>{% endfor %}</td>
+      <td class="hint">{% for file in row.files %}<a href="https://commons.wikimedia.org/wiki/File:{{ file|urlencode }}">{{ file }}</a><br>{% endfor %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

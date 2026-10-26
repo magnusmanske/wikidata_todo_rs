@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Taxa with a sound file on Wikidata (audio, P51), whose article on {{ wiki }} has no sound at all.</p>
+<form method="get" action="/missing_wp_animal_audio/" class="inline">
+  <div class="row">
+    <label>Wiki <input type="text" name="wiki" value="{{ wiki }}" placeholder="enwiki" required></label>
+    <button>Use this wiki</button>
+  </div>
+</form>
+<h2>{{ rows.len() }} articles without sound</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="num">#</th><th>Article</th><th>Item</th><th>Sound on Wikidata</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td class="num">{{ loop.index }}</td>
+      <td><a href="{{ row.url }}">{{ row.title }}</a></td>
+      <td><a href="https://www.wikidata.org/wiki/{{ row.item }}">{{ row.item }}</a></td>
+      <td><a href="https://commons.wikimedia.org/wiki/File:{{ row.file|urlencode }}">{{ row.file }}</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

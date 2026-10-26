@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">An RSS feed of images (for your screensaver?), from a <a href="https://query.wikidata.org/">SPARQL</a> query: a random sample of the images of its items, new on every visit.</p>
+<form method="get" action="/wdq_image_feed/">
+  <label>SPARQL query <span class="hint">first variable the item, second the image</span>
+    <textarea class="code" name="sparql" rows="5">{{ request.sparql }}</textarea>
+  </label>
+  <label>or WDQ query <span class="hint">as of old; the items' images (P18) are used. Supported: {{ supported }}</span>
+    <input type="text" name="wdq" value="{{ request.wdq }}">
+  </label>
+  <div class="row">
+    <label>Thumbnail width <span class="hint">pixels</span>
+      <input type="number" name="thumbsize" min="50" max="2000" value="{{ request.thumbsize }}"></label>
+    <label>Images <span class="hint">at most 500</span>
+      <input type="number" name="max" min="1" max="500" value="{{ request.max }}"></label>
+  </div>
+  <button name="doit" value="1">Generate feed</button>
+</form>
+<p class="hint">Example: <a href="{{ demo_url }}">bridges across the Danube</a>.</p>
+{% endblock %}

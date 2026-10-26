@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The items that have these strings as values of a property, such as an external ID.</p>
+<form method="post" action="/property_string_matcher/">
+  <label>String property <input type="text" name="prop" value="{{ request.prop }}" placeholder="P214" required></label>
+  <label>Values <span class="hint">one per line; at most {{ max_values }}</span>
+    <textarea name="rows" rows="10">{{ request.rows }}</textarea>
+  </label>
+  <button name="doit" value="1">Find items</button>
+</form>
+{% if let Some(results) = results %}
+<h2>{{ results.matches.len() }} matches</h2>
+<p class="muted">For {{ results.values }} values of {{ results.property }}.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Item</th><th>Value</th></tr></thead>
+  <tbody>
+  {% for (item, value) in results.matches %}
+    <tr><td><a href="https://www.wikidata.org/wiki/{{ item }}">{{ item }}</a></td><td>{{ value }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

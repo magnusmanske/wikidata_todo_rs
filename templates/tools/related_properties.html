@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The properties used by the items of a query, and by how many of them.</p>
+<form method="get" action="/related_properties/">
+  <label>Query <span class="hint">SPARQL (the first variable holds the items), or WDQ as of old: {{ supported }}</span>
+    <textarea class="code" name="q" rows="4" required>{{ q }}</textarea>
+  </label>
+  <button>Analyse</button>
+</form>
+{% if results.is_none() %}
+<p class="hint">Example: <a href="/related_properties/?q=claim%5B31%3A2334719%5D">court cases</a>.
+Add <code>botmode=1</code> (and <code>callback</code>) for JSON(P).</p>
+{% endif %}
+{% if let Some(results) = results %}
+<h2>{{ results.rows.len() }} properties</h2>
+<p class="muted">Used by {{ results.items }} items{% if results.sampled %}, a random sample of the query's results{% endif %}; in statements, qualifiers or references.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Property</th><th class="num">Items</th><th class="num">% of all</th><th>Those items</th></tr></thead>
+  <tbody>
+  {% for row in results.rows %}
+    <tr>
+      <td><a href="https://www.wikidata.org/wiki/Property:{{ row.property }}">{% if let Some(label) = row.label %}{{ label }}</a> ({{ row.property }}){% else %}{{ row.property }}</a>{% endif %}</td>
+      <td class="num">{{ row.count }}</td>
+      <td class="num">{{ row.percent }} %</td>
+      <td>{% if let Some(url) = row.items_url %}<a href="{{ url }}">PetScan</a>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

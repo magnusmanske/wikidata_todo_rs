@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The tree of items below a root item, along properties that point upwards, as a
+<a href="https://en.wikipedia.org/wiki/DOT_(graph_description_language)">DOT</a> or
+<a href="https://en.wikipedia.org/wiki/Trivial_Graph_Format">TGF</a> graph, to open with e.g.
+<a href="https://www.yworks.com/products/yed">yEd</a> or Graphviz.</p>
+<form method="get" action="/wdq2graph/">
+  <div class="row">
+    <label>Root item <input type="text" name="q" value="{{ request.q }}" placeholder="Q146481" required></label>
+    <label>Properties to follow <span class="hint">comma-separated</span>
+      <input type="text" name="props" value="{{ request.props }}" placeholder="P361,P279" required></label>
+    <label>Labels <span class="hint">language</span>
+      <input type="text" name="lang" value="{{ request.lang }}"></label>
+  </div>
+  <div class="row">
+    <label class="check"><input type="radio" name="format" value="dot"{% if is_dot %} checked{% endif %}> DOT</label>
+    <label class="check"><input type="radio" name="format" value="tgf"{% if !is_dot %} checked{% endif %}> Trivial Graph Format</label>
+  </div>
+  <button name="doit" value="1">Generate graph</button>
+</form>
+{% if let Some(graph) = graph %}
+<h2>Graph</h2>
+<textarea class="code" id="graph" rows="16" readonly>{{ graph }}</textarea>
+{% if is_dot %}
+<div id="rendering" class="table-wrap"><p class="muted">Rendering…</p></div>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/viz.js/2.1.2/viz.js"></script>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/viz.js/2.1.2/full.render.js"></script>
+<script>
+// Draws the graph in the browser.
+(() => {
+  const output = document.getElementById('rendering');
+  new Viz().renderSVGElement(document.getElementById('graph').value)
+    .then(svg => output.replaceChildren(svg))
+    .catch(() => output.replaceChildren('This graph cannot be drawn here.'));
+})();
+</script>
+{% endif %}
+{% else %}
+<p class="hint">Example: <a href="/wdq2graph/?q=Q146481&amp;props=P361%2CP279&amp;lang=en&amp;format=dot&amp;doit=1">taxonomic ranks</a>.</p>
+{% endif %}
+{% endblock %}

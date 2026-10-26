@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">How the dates of items spread over time, for items whose property value is in a class tree; e.g. the birth dates of people with an occupation that is a kind of artist.</p>
+<form method="get" action="/subclass_dates/">
+  <div class="row">
+    <label>Property <span class="hint">e.g. P106, occupation</span>
+      <input type="text" name="prop" value="{{ request.prop }}" required></label>
+    <label>Date property <span class="hint">P569 birth, P570 death</span>
+      <input type="text" name="dateprop" value="{{ request.dateprop }}" required></label>
+    <label>Bucket size <span class="hint">years</span>
+      <input type="number" name="bucket_size" min="1" max="10000" value="{{ request.bucket_size }}" required></label>
+  </div>
+  <label>Root item <span class="hint">the class; its subclasses count too; e.g. Q483501, artist</span>
+    <input type="text" name="root" value="{{ request.root }}" required></label>
+  <label>Exclude <span class="hint">comma-separated classes, with their subclasses; e.g. Q33999, actor</span>
+    <input type="text" name="exclude" value="{{ request.exclude }}"></label>
+  <button name="doit" value="1">Count</button>
+</form>
+{% if let Some(results) = results %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Bucket <span class="hint">first year; {{ results.bucket_size }} years</span></th><th class="num">Count</th></tr></thead>
+  <tbody>
+  {% for (start, count) in results.buckets %}
+    <tr><td>{{ start }}</td><td class="num">{{ count }}</td></tr>
+  {% endfor %}
+  </tbody>
+  <tfoot><tr><th>Total</th><th class="num">{{ results.total }}</th></tr></tfoot>
+</table>
+</div>
+{% else %}
+<p class="hint">Example: <a href="/subclass_dates/?prop=P106&amp;dateprop=P569&amp;bucket_size=50&amp;root=Q11063&amp;exclude=Q170790&amp;doit=1">birth dates of astronomers who are not mathematicians</a>.
+Very large trees (all artists, say) are too much for the query service.</p>
+{% endif %}
+{% endblock %}
