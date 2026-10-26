@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">There's always something to do on Wikidata, so let's get to work!</p>
+
+{% if let Some(batch) = batch %}
+<h2>{{ batch.description|capitalize }}</h2>
+{% if let Some(total) = batch.total %}<p>There are {{ total }} of them on Wikidata. Here is a random batch.</p>
+{% else %}<p>A random batch of them.</p>{% endif %}
+<ul class="columns">
+{% for item in batch.items %}<li><a href="https://www.wikidata.org/wiki/{{ item.id }}">{{ item.label }}</a></li>
+{% else %}<li class="muted">None found.</li>{% endfor %}
+</ul>
+<p><a href="{{ batch.permalink }}">Permalink</a> · <a href="/">Back</a></p>
+{% else %}
+<ul>
+{% for (key, description) in actions %}<li><a href="/?action={{ key }}">{{ description }}</a></li>
+{% endfor %}
+<li>Taxa without
+<a data-sparql="SELECT ?item { ?item wdt:P31 wd:Q16521 MINUS { ?item wdt:P105 [] } }">taxon rank</a> ·
+<a data-sparql="SELECT ?item { ?item wdt:P31 wd:Q16521 MINUS { ?item wdt:P171 [] } }">parent taxon</a> ·
+<a data-sparql="SELECT ?item { ?item wdt:P31 wd:Q16521 MINUS { ?item wdt:P225 [] } }">taxon name</a></li>
+<li><a href="/important_blank_items/">Important items without statements about other items</a></li>
+</ul>
+
+<h2>By country</h2>
+<form class="inline" onsubmit="return false">
+<label>Country
+<select id="country">
+{% for (id, name) in countries.iter() %}<option value="{{ id }}"{% if *id == country %} selected{% endif %}>{{ name }}</option>
+{% endfor %}
+</select></label>
+</form>
+<ul id="country-links">
+<li><a data-sparql="SELECT ?item { ?item wdt:P31 wd:Q5 ; wdt:P27 wd:COUNTRY MINUS { ?item wdt:P18 [] } }">Citizens without image</a>
+  · <a data-fist="SELECT ?item { ?item wdt:P31 wd:Q5 ; wdt:P27 wd:COUNTRY }">with candidate images</a>
+  <span class="muted" data-ratio="?item wdt:P31 wd:Q5 ; wdt:P27 wd:COUNTRY"></span></li>
+<li><a data-sparql="SELECT ?item { { ?item wdt:P17 wd:COUNTRY } UNION { ?item wdt:P131 wd:COUNTRY } MINUS { ?item wdt:P18 [] } }">Places and objects without image</a>
+  · <a data-fist="SELECT ?item { { ?item wdt:P17 wd:COUNTRY } UNION { ?item wdt:P131* wd:COUNTRY } }">with candidate images</a>
+  <span class="muted" data-ratio="{ ?item wdt:P17 wd:COUNTRY } UNION { ?item wdt:P131 wd:COUNTRY }"></span></li>
+<li>Citizens without
+  <a data-sparql="SELECT ?item { ?item wdt:P31 wd:Q5 ; wdt:P27 wd:COUNTRY MINUS { ?item wdt:P21 [] } }">gender</a> ·
+  <a data-sparql="SELECT ?item { ?item wdt:P31 wd:Q5 ; wdt:P27 wd:COUNTRY MINUS { ?item wdt:P106 [] } }">occupation</a> ·
+  <a data-sparql="SELECT ?item { ?item wdt:P31 wd:Q5 ; wdt:P27 wd:COUNTRY MINUS { ?item wdt:P569 [] } }">birth date</a> ·
+  <a title="born before 1900" data-sparql="SELECT ?item { ?item wdt:P31 wd:Q5 ; wdt:P27 wd:COUNTRY ; wdt:P569 ?born FILTER(YEAR(?born) &lt; 1900) MINUS { ?item wdt:P570 [] } }">death date</a></li>
+<li><a data-sparql="SELECT ?item { ?item wdt:P17 wd:COUNTRY ; wdt:P31/wdt:P279* wd:Q82794 MINUS { ?item wdt:P131 [] } }">Places in the country, but in no administrative unit</a> <span class="muted">(many false positives)</span></li>
+</ul>
+<p><a id="country-permalink" href="/">Permalink for this country</a></p>
+{% endif %}
+
+<h2>Tools</h2>
+<ul class="columns">
+{% for (name, label) in tools %}<li><a href="/{{ name }}/">{{ label }}</a></li>
+{% endfor %}
+</ul>
+<h2>Apps</h2>
+<ul class="tools">
+{% for (url, name, description) in apps %}<li><strong><a href="{{ url }}">{{ name }}</a></strong> {{ description }}</li>
+{% endfor %}
+</ul>
+
+<script>
+// Fills the SPARQL-based links in, for the chosen country; and counts how many items have images.
+(() => {
+  const select = document.getElementById('country');
+  const petscan = q => 'https://petscan.wmcloud.org/?doit=1&sparql=' + encodeURIComponent(q);
+  const fist = q => 'https://fist.toolforge.org/wdfist/?sparql=' + encodeURIComponent(q);
+  for (const a of document.querySelectorAll('a[data-sparql]')) a.href = petscan(a.dataset.sparql);
+  if (!select) return;
+  async function count(where) {
+    const query = 'SELECT (COUNT(DISTINCT ?item) AS ?n) { ' + where + ' }';
+    const r = await fetch('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(query));
+    return Number((await r.json()).results.bindings[0].n.value);
+  }
+  async function ratio(span, where) {
+    span.textContent = '…';
+    try {
+      const [all, images] = await Promise.all([count('{' + where + '}'), count('{' + where + '} ?item wdt:P18 []')]);
+      span.textContent = all ? `${images.toLocaleString()} of ${all.toLocaleString()} items (${Math.floor(images * 1000 / all) / 10}%) have images` : '';
+    } catch (e) { span.textContent = ''; }
+  }
+  function update() {
+    const country = select.value;
+    const fill = s => s.replaceAll('COUNTRY', country);
+    for (const a of document.querySelectorAll('#country-links a[data-sparql]')) a.href = petscan(fill(a.dataset.sparql));
+    for (const a of document.querySelectorAll('#country-links a[data-fist]')) a.href = fist(fill(a.dataset.fist));
+    for (const span of document.querySelectorAll('#country-links [data-ratio]')) ratio(span, fill(span.dataset.ratio));
+    document.getElementById('country-permalink').href = '/?country=' + country;
+  }
+  select.addEventListener('change', update);
+  update();
+})();
+</script>
+{% endblock %}

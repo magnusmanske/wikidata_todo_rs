@@ -1,0 +1,178 @@
+/* The one stylesheet of all wikidata-todo pages (as of magnustools). Light and dark follow the system. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #fdfdfc;
+  --fg: #1d1d1f;
+  --muted: #6b6b70;
+  --line: #e2e2e5;
+  --surface: #f4f4f5;
+  --accent: #3657c9;
+  --accent-fg: #fff;
+  --danger: #b3261e;
+  --radius: 6px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618;
+    --fg: #e8e8ea;
+    --muted: #9a9aa0;
+    --line: #2e2e33;
+    --surface: #212125;
+    --accent: #8aa4ff;
+    --accent-fg: #10121a;
+    --danger: #ff8a80;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.55 var(--font);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+main, header.site, footer.site {
+  width: 100%;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+main { flex: 1; padding-bottom: 3rem; }
+
+header.site { padding-top: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
+header.site { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+header.site .brand { color: var(--fg); font-weight: 600; text-decoration: none; }
+
+/* The tools menu, at the right of the header. */
+details.menu { position: relative; }
+details.menu summary { cursor: pointer; color: var(--muted); list-style: none; }
+details.menu summary::-webkit-details-marker { display: none; }
+details.menu summary::after { content: " ▾"; }
+details.menu summary:hover, details.menu[open] summary { color: var(--fg); }
+details.menu ul {
+  position: absolute;
+  right: 0;
+  z-index: 10;
+  margin: 0.5rem 0 0;
+  padding: 0.35rem 0;
+  list-style: none;
+  min-width: 16rem;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.15);
+}
+details.menu a { display: block; padding: 0.3rem 1rem; color: var(--fg); }
+details.menu a:hover { background: var(--surface); }
+details.menu a[aria-current="page"] { font-weight: 600; color: var(--accent); }
+
+footer.site {
+  display: flex;
+  gap: 1.5rem;
+  padding-top: 1rem;
+  padding-bottom: 1.5rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.875rem;
+}
+footer.site a { color: var(--muted); }
+
+h1 { font-size: 1.75rem; font-weight: 600; letter-spacing: -0.01em; margin: 2rem 0 1rem; }
+h2 { font-size: 1.25rem; font-weight: 600; margin: 2rem 0 0.75rem; }
+
+a { color: var(--accent); text-underline-offset: 2px; }
+a:not(:hover) { text-decoration: none; }
+
+p.lead { color: var(--muted); margin-top: -0.5rem; }
+
+code, pre, textarea.code { font-family: var(--mono); font-size: 0.875rem; }
+pre {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+}
+
+/* Forms: one field per row, label above. */
+form { display: grid; gap: 1rem; max-width: 40rem; }
+label { display: grid; gap: 0.3rem; font-weight: 500; }
+label.check { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; }
+fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.75rem 1rem; margin: 0; }
+legend { font-weight: 600; padding: 0 0.3rem; }
+.row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; }
+.row > label:not(.check) { flex: 1 1 5rem; }
+.hint { color: var(--muted); font-size: 0.875rem; font-weight: normal; }
+
+input, select, textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.65rem;
+  width: 100%;
+}
+input[type="checkbox"], input[type="radio"] { width: auto; accent-color: var(--accent); }
+textarea { min-height: 8rem; resize: vertical; }
+input:focus, select:focus, textarea:focus, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  font: inherit;
+  font-weight: 500;
+  justify-self: start;
+  padding: 0.5rem 1.25rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-fg);
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.08); }
+form.inline { display: block; max-width: none; }
+button.link { background: none; color: var(--accent); padding: 0; font-weight: normal; }
+
+/* Results */
+table { border-collapse: collapse; width: 100%; font-size: 0.9375rem; }
+th, td { text-align: left; padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.table-wrap { overflow-x: auto; }
+
+.thumbs { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.thumbs img { max-width: 180px; max-height: 180px; border-radius: var(--radius); }
+ul.hits { list-style: none; padding: 0; }
+ul.hits li { margin: 0 0 1rem; }
+
+.error { color: var(--danger); }
+
+/* Templator: required fields, and the wiki's rendering of descriptions. */
+input.required { background: color-mix(in srgb, #1fb5b5 14%, var(--bg)); }
+input.required.missing { background: color-mix(in srgb, var(--danger) 14%, var(--bg)); }
+.description p, .description ul, .description dl { margin: 0.2rem 0; }
+nav.groups.templates { margin: 0.5rem 0; }
+nav.groups.templates a[aria-current="page"] { font-weight: 600; }
+.muted { color: var(--muted); }
+
+/* Main page */
+nav.groups { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 1.5rem 0; font-size: 0.9375rem; }
+ul.tools { padding-left: 1.25rem; }
+ul.tools li { margin: 0.35rem 0; }
+.tool-links a { font-size: 0.8125rem; margin-left: 0.4rem; }
+
+/* Long lists of short entries */
+ul.columns { columns: 16rem; column-gap: 2rem; padding-left: 1.25rem; }
+ul.columns li { break-inside: avoid; margin: 0.15rem 0; }

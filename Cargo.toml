@@ -1,0 +1,44 @@
+[package]
+name = "wikidata_todo_rs"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-2.0-or-later"
+description = "Web service and background jobs of the wikidata-todo Toolforge tool"
+repository = "https://github.com/magnusmanske/wikidata_todo_rs"
+authors = ["Magnus Manske <magnusmanske@googlemail.com>"]
+
+[dependencies]
+anyhow = "1"
+askama = "0.16"
+axum = "0.8"
+axum-extra = { version = "0.12", features = ["cookie-private"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+csv = "1"
+clap = { version = "4", features = ["derive", "env"] }
+futures = "0.3"
+hmac = "0.12"
+percent-encoding = "2"
+rand = "0.9"
+regex = "1"
+reqwest = { version = "0.13", features = ["json", "form", "query", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_urlencoded = "0.7"
+sha1 = "0.10"
+thiserror = "2"
+time = "0.3"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.7", features = ["fs", "trace", "timeout", "compression-gzip", "compression-br", "catch-panic", "set-header"] }
+tracing = "0.1"
+wikimisc = { git = "https://github.com/magnusmanske/wikimisc", features = ["database", "escape", "http", "labels", "logging", "server", "sparql-client", "telemetry", "toolforge"] }
+
+[dev-dependencies]
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+strip = "symbols"

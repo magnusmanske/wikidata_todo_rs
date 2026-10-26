@@ -1,0 +1,9 @@
+{
+  "public_html": "/data/project/wikidata-todo/public_html",
+  "data_dir": "/data/project/wikidata-todo",
+  "public_url": "https://wikidata-todo.toolforge.org",
+  "replica_credentials": "replica.my.cnf",
+  "cookie_key": "<128 hex digits: openssl rand -hex 64>",
+  "oauth": "oauth.ini",
+  "telemetry": { "token": "<dashboard token; or set $DASHBOARD_TOKEN>" }
+}

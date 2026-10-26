@@ -1,0 +1,7 @@
+/target
+/config.json
+
+# Credentials: never commit
+*.ini
+*.cnf
+/dev
