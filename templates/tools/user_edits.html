@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">A user's edits to Wikidata items, newest first: all of them, or those to the items of a SPARQL query, with edit summaries matching a pattern.</p>
+<p class="hint">Example: <a href="/user_edits/?sparql=SELECT+DISTINCT+%3Fq+%7B+%3Fq+%28p%3AP569%7Cp%3AP570%29+%3Fstatement+.+%3Fstatement+prov%3AwasDerivedFrom%2F%3Chttp%3A%2F%2Fwww.wikidata.org%2Fprop%2Freference%2FP4025%3E+%5B%5D+%7D&amp;pattern=wbcreateclaim.*%5Cb%28P570%7CP569%29%5Cb.*Mix%27n%27match%3AReferences%24&amp;user=Reinheitsgebot&amp;doit=1">edits by Reinheitsgebot creating a birth or death date as part of “Mix'n'match:References”, on items where such a date has a reference with a Pinakothek artist ID (P4025)</a></p>
+<form method="get" action="/user_edits/">
+  <label>User <span class="hint">any user or bot, without “User:”; e.g. QuickStatementsBot</span>
+    <input type="text" name="user" value="{{ request.user }}" required>
+  </label>
+  <label>SPARQL query <span class="hint">optional; the first variable holds the items (at most {{ max_items }} count); design it on <a href="https://query.wikidata.org/">the query service</a></span>
+    <textarea name="sparql" class="code" rows="3">{{ request.sparql }}</textarea>
+  </label>
+  <label>Pattern <span class="hint">optional; a <a href="https://docs.rs/regex/latest/regex/#syntax">regular expression</a> the edit summary must match. Typical actions:
+    {% for action in actions %}<code>{{ action }}</code> {% endfor %}</span>
+    <input type="text" name="pattern" value="{{ request.pattern }}">
+  </label>
+  <label class="check"><input type="checkbox" name="only_page_creations" value="1"{% if creations %} checked{% endif %}> Only page creations</label>
+  <p class="hint">Dates: {{ help }}.</p>
+  <div class="row">
+    <label>Start date <input type="text" name="start" value="{{ request.start }}" placeholder="YYYYMMDDHHMMSS"></label>
+    <label>End date <input type="text" name="end" value="{{ request.end }}" placeholder="YYYYMMDDHHMMSS"></label>
+  </div>
+  <div class="row">
+    <label class="check"><input type="radio" name="format" value="html"{% if format == Format::Html %} checked{% endif %}> Table</label>
+    <label class="check"><input type="radio" name="format" value="text"{% if format == Format::Text %} checked{% endif %}> Text</label>
+    <label class="check"><input type="radio" name="format" value="jsonl"{% if format == Format::JsonLines %} checked{% endif %}> JSON lines</label>
+  </div>
+  <p class="hint">The table and the text show at most {{ max_rows }} edits; with a pattern, of at most the latest {{ max_scanned }} edits (per 5,000 items of a query). JSON lines have them all.</p>
+  <button name="doit" value="1">Show edits</button>
+</form>
+{% if let Some(error) = error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+{% if let Some(results) = results %}
+<h2>{{ results.edits.len() }} edits</h2>
+{% if results.capped %}<p class="muted">There may be more; see above for the limits.</p>{% endif %}
+{% if format == Format::Text %}
+<textarea class="code" rows="20" readonly>{{ results.text() }}</textarea>
+<p class="hint">Tab-separated: timestamp, item, label, edit summary, revision ID, parent revision ID.</p>
+{% else %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="num">#</th><th>Time</th><th>Item</th><th>Edit summary</th><th></th></tr></thead>
+  <tbody>
+{% for edit in results.edits %}
+  <tr>
+    <td class="num">{{ loop.index }}</td>
+    <td>{{ edit.timestamp }}</td>
+    <td><a href="https://www.wikidata.org/wiki/{{ edit.item }}">{{ edit.label }}</a> <span class="muted">{{ edit.item }}</span></td>
+    {# Escaped in code, with links added. #}
+    <td><small>{{ edit.comment_html|safe }}</small></td>
+    <td><a href="{{ edit.diff_url }}">diff</a> · <a href="{{ edit.undo_url }}">undo</a></td>
+  </tr>
+{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

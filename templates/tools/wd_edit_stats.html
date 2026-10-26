@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Edits per month and per user, to the items of a SPARQL query, in a date range.</p>
+<form method="get" action="/wd_edit_stats/">
+  <label>SPARQL query <span class="hint">the first variable holds the items; design it on <a href="https://query.wikidata.org/">the query service</a></span>
+    <textarea name="sparql" class="code" rows="4" required placeholder="SELECT ?q { ?q wdt:P31 wd:Q5 ; wdt:P106 wd:Q1028181 ; wdt:P27 wd:Q142 }">{{ request.sparql }}</textarea>
+  </label>
+  <p class="hint">Dates: {{ help }}.</p>
+  <div class="row">
+    <label>Start date <span class="hint">empty: from the beginning</span>
+      <input type="text" name="from" value="{{ request.from }}" placeholder="20170801"></label>
+    <label>End date <span class="hint">empty: now</span>
+      <input type="text" name="to" value="{{ request.to }}" placeholder="20170901"></label>
+  </div>
+  <button name="doit" value="1">Count edits</button>
+</form>
+{% if let Some(stats) = stats %}
+<p>{{ stats.total }} edits to {{ stats.items }} items{% if stats.capped %} (only the first {{ max_items }} of the query's items count){% endif %};
+{{ stats.unregistered }} of them by unregistered users, who are not listed.</p>
+<h2>Edits per month</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Month</th><th class="num">Edits</th></tr></thead>
+  <tbody>
+{% for (month, edits) in stats.months %}  <tr><td>{{ month }}</td><td class="num">{{ edits }}</td></tr>
+{% endfor %}  </tbody>
+</table>
+</div>
+<h2>Edits per user</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>User</th><th class="num">Edits</th></tr></thead>
+  <tbody>
+{% for (user, url, edits) in stats.users %}  <tr><td><a href="{{ url }}">{{ user }}</a></td><td class="num">{{ edits }}</td></tr>
+{% endfor %}  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

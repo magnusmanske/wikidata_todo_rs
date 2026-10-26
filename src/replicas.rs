@@ -154,6 +154,29 @@ impl Replicas {
     }
 }
 
+/// Wikidata's entity namespaces: ID prefix, namespace, title prefix.
+const ENTITY_NAMESPACES: &[(char, i64, &str)] = &[('Q', 0, ""), ('P', 120, "Property:"), ('L', 146, "Lexeme:")];
+
+/// The pages of Wikidata entities (`Q42`, `P31`, `L7`; others are left
+/// out, as are missing ones), as `(page ID, entity ID)`.
+pub async fn entity_pages(conn: &mut Conn, ids: &[String]) -> Result<Vec<(u64, String)>> {
+    let mut pages = vec![];
+    for (prefix, namespace, _) in ENTITY_NAMESPACES {
+        let titles: Vec<&str> = ids.iter().filter(|id| id.starts_with(*prefix)).map(String::as_str).collect();
+        if !titles.is_empty() {
+            let sql = "SELECT page_id, page_title FROM page WHERE page_namespace=? AND page_title IN";
+            pages.extend(select_in::<(u64, String), _>(conn, sql, "", &[(*namespace).into()], &titles).await?);
+        }
+    }
+    Ok(pages)
+}
+
+/// The page title of a Wikidata entity: `Q42`, `Property:P31`, `Lexeme:L7`.
+pub fn entity_page_title(id: &str) -> String {
+    let prefix = ENTITY_NAMESPACES.iter().find(|(p, ..)| id.starts_with(*p)).map_or("", |(.., title)| *title);
+    format!("{prefix}{id}")
+}
+
 /// The `linktarget` IDs of pages; joining `pagelinks` (or `categorylinks`,
 /// `templatelinks`) with these IDs is much faster than joining on `linktarget`.
 pub async fn linktarget_ids(conn: &mut Conn, namespace: i64, titles: &[&str]) -> Result<Vec<u64>> {
@@ -219,5 +242,7 @@ mod tests {
         assert_eq!(placeholders(0), "");
         assert_eq!(format_timestamp("20240102030405"), "2024-01-02 03:04:05");
         assert_eq!(format_date("20240102030405"), "2024-01-02");
+        assert_eq!(entity_page_title("Q1"), "Q1");
+        assert_eq!(entity_page_title("L7"), "Lexeme:L7");
     }
 }

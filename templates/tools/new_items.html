@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The newest Wikidata items, created at or before a time (or now).</p>
+<form method="get" action="/new_items/">
+  <label>Created at or before <span class="hint">empty for now; {{ help }}</span>
+    <input type="text" name="timestamp" value="{{ timestamp }}" placeholder="e.g. 20150820122448">
+  </label>
+  <label>Number of items <span class="hint">at most {{ max_items }}</span>
+    <input type="number" name="max" value="{{ max }}" min="1" max="{{ max_items }}">
+  </label>
+  <div class="row">
+    <label class="check"><input type="radio" name="format" value="html"{% if !pagepile %} checked{% endif %}> Table</label>
+    <label class="check"><input type="radio" name="format" value="pagepile"{% if pagepile %} checked{% endif %}> New PagePile</label>
+  </div>
+  <button name="doit" value="1">Show new items</button>
+</form>
+{% if let Some(items) = items %}
+<h2>{{ items.len() }} items</h2>
+<p class="muted">Redirects (merged items) are left out.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Item</th><th>Created by</th><th>Created</th></tr></thead>
+  <tbody>
+{% for item in items %}
+  <tr>
+    <td><a href="https://www.wikidata.org/wiki/{{ item.id }}">{% if let Some(label) = item.label %}{{ label }}</a> <span class="muted">{{ item.id }}</span>{% else %}{{ item.id }}</a>{% endif %}</td>
+    <td><a href="{{ item.creator_url }}">{{ item.creator }}</a></td>
+    <td>{{ item.created }}</td>
+  </tr>
+{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

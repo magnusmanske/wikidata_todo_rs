@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block head %}
+<link rel="stylesheet" href="https://www.wikidata.org/w/load.php?lang=en&amp;modules=mediawiki.diff.styles&amp;only=styles&amp;skin=vector">
+<style>
+section.change { border-top: 1px solid var(--line); margin-top: 1.5rem; }
+section.change h3 { font-size: 1.05rem; margin: 0.75rem 0 0.5rem; }
+section.change h3 small { font-weight: normal; color: var(--muted); }
+table.diff { font-size: 0.8125rem; table-layout: fixed; }
+table.diff td { border: 0; padding: 0.15rem 0.3rem; }
+.summary { border-left: 4px solid var(--line); padding-left: 0.5rem; font-family: var(--mono); font-size: 0.8125rem; }
+.created { color: green; }
+.editors { font-size: 0.8125rem; color: var(--muted); margin-top: 0.4rem; }
+.editors a.unregistered { background: color-mix(in srgb, var(--danger) 20%, transparent); }
+</style>
+{% endblock %}
+{% block content %}
+<p class="lead">The changes to the items of a SPARQL query in a time range: per item, one diff over all its edits in the range, and who made them.</p>
+<p class="hint">Examples: French painters
+<a href="/sparql_rc/?sparql=SELECT+%3Fq+%7B+%3Fq+wdt%3AP31+wd%3AQ5+%3B+wdt%3AP106%2Fwdt%3AP279*+wd%3AQ1028181+%3B+wdt%3AP27+wd%3AQ142+%7D&amp;start=20171001&amp;end=20171007235959&amp;no_bots=1&amp;skip_unchanged=1">in the first week of October 2017, without bot edits</a>,
+<a href="/sparql_rc/?sparql=SELECT+%3Fq+%7B+%3Fq+wdt%3AP31+wd%3AQ5+%3B+wdt%3AP106%2Fwdt%3AP279*+wd%3AQ1028181+%3B+wdt%3AP27+wd%3AQ142+%7D&amp;start=last+week&amp;no_bots=1&amp;skip_unchanged=1">in the last week</a>,
+<a href="/sparql_rc/?sparql=SELECT+%3Fq+%7B+%3Fq+wdt%3AP31+wd%3AQ5+%3B+wdt%3AP106%2Fwdt%3AP279*+wd%3AQ1028181+%3B+wdt%3AP27+wd%3AQ142+%7D&amp;start=yesterday&amp;no_bots=1&amp;skip_unchanged=1">since yesterday</a>;
+<a href="/sparql_rc/?sparql=SELECT+%3Fq+WHERE+%7B+%3Fq+dct%3Alanguage+wd%3AQ9027+%3B+wikibase%3Alemma+%3Flemma+%3B+ontolex%3AlexicalForm+%3Fform+.+%3Fform+ontolex%3Arepresentation+%3Flemma+MINUS+%7B+%3Fform+wdt%3AP443+%3Faudio+%7D+%7D&amp;start=last+week&amp;no_bots=1&amp;skip_unchanged=1">Swedish lexemes</a> whose lemma form has no pronunciation, in the last week.</p>
+<form method="get" action="/sparql_rc/">
+  <label>SPARQL query <span class="hint">the first variable holds the items (or lexemes, or properties); at most {{ max_items }} count; design it on <a href="https://query.wikidata.org/">the query service</a></span>
+    <textarea name="sparql" class="code" rows="4" required placeholder="SELECT ?q { ?q wdt:P31 wd:Q5 ; wdt:P27 wd:Q142 }">{{ request.sparql }}</textarea>
+  </label>
+  <p class="hint">Dates (UTC): {{ help }}.</p>
+  <div class="row">
+    <label>Start <input type="text" name="start" value="{{ request.start }}" placeholder="YYYYMMDDHHMMSS" required></label>
+    <label>End <span class="hint">empty: now</span> <input type="text" name="end" value="{{ request.end }}" placeholder="YYYYMMDDHHMMSS"></label>
+  </div>
+  <label>Preferred languages for labels <span class="hint">language codes, comma-separated, preferred first; e.g. de,en,fr</span>
+    <input type="text" name="user_lang" value="{{ request.user_lang }}">
+  </label>
+  <div class="row">
+    <label class="check"><input type="radio" name="sort_mode" value="last_edit"{% if !sort_by_label %} checked{% endif %}> By last edit, latest first</label>
+    <label class="check"><input type="radio" name="sort_mode" value="label"{% if sort_by_label %} checked{% endif %}> By label</label>
+  </div>
+  <div class="row">
+    <label class="check"><input type="checkbox" name="no_bots" value="1"{% if no_bots %} checked{% endif %}> No bot edits</label>
+    <label class="check"><input type="checkbox" name="skip_unchanged" value="1"{% if skip_unchanged %} checked{% endif %}> Skip unchanged items</label>
+  </div>
+  <p class="hint">The first {{ max_diffs }} changed items get their diff; the others a link to it. Add <code>format=json</code> to the address for JSON.</p>
+  <button>Get recent changes</button>
+</form>
+{% if let Some(error) = error %}
+<p class="error">{{ error }}.</p>
+{% endif %}
+{% if let Some(report) = report %}
+<h2>{{ report.total }} items</h2>
+{% if report.capped() %}<p class="muted">Only the first {{ max_items }} count.</p>{% endif %}
+<p>{{ report.changes.len() }} have changed between {{ crate::replicas::format_timestamp(report.start.as_str()) }} and {{ crate::replicas::format_timestamp(report.end.as_str()) }}.</p>
+{% for change in report.changes %}
+<section class="change">
+  <h3><a href="https://www.wikidata.org/wiki/{{ change.title() }}">{{ change.label() }}</a>{% if change.label.is_some() %} <span class="muted">{{ change.id }}</span>{% endif %}
+    <small><a href="{{ change.diff_url() }}">diff on wiki</a> · {{ change.before() }}{% if change.first.timestamp != change.last.timestamp %} – {{ change.after() }}{% endif %}</small></h3>
+  {% if change.created() %}<p class="created">The item was created!</p>{% endif %}
+  {% match change.diff %}
+  {% when Diff::Html(_) %}
+  <div class="table-wrap"><table class="diff diff-contentalign-left">
+    <colgroup><col class="diff-marker"><col class="diff-content"><col class="diff-marker"><col class="diff-content"></colgroup>
+    {# The diff HTML comes from the Wikidata API. #}
+    <tbody>{{ change.diff_html().unwrap_or_default()|safe }}</tbody>
+  </table></div>
+  {% when Diff::None(comment) %}
+  {% if change.reverted() %}<p class="muted">No change to the item; the last edit summary was:</p>
+  <div class="summary">{% if let Some(editor) = change.last_editor() %}<a href="{{ editor.url() }}">{{ editor.name }}</a>: {% endif %}{{ comment }}</div>{% endif %}
+  {% when Diff::Failed(message) %}
+  <p class="error">Diff loading failed: {{ message }}</p>
+  {% when Diff::NotLoaded %}
+  {% endmatch %}
+  <div class="editors">Editors:
+    {% for editor in change.editors %}<a href="{{ editor.url() }}"{% if editor.user_id == 0 %} class="unregistered"{% endif %}>{{ editor.name }}</a>{% if editor.edits > 1 %} ({{ editor.edits }}×){% endif %}{% if !loop.last %} · {% endif %}{% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% if !report.skip_unchanged %}
+<h2>{{ report.unchanged.len() }} items have not changed</h2>
+<ul class="columns">
+{% for entity in report.unchanged_shown() %}<li><a href="https://www.wikidata.org/wiki/{{ crate::replicas::entity_page_title(entity.id) }}">{% if let Some(label) = entity.label %}{{ label }}{% else %}{{ entity.id }}{% endif %}</a></li>
+{% endfor %}
+</ul>
+{% if report.unchanged.len() > max_unchanged %}<p class="muted">The first {{ max_unchanged }} are shown.</p>{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}
