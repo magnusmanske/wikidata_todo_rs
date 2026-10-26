@@ -1,0 +1,48 @@
+# Toolforge jobs: `toolforge jobs load jobs.yaml`. Each runs `job <command>`
+# (see the Procfile) in the image that ./build.sh makes.
+- name: duplicity-update
+  command: job duplicity-update
+  image: tool-wikidata-todo/tool-wikidata-todo:latest
+  schedule: "45 13 * * *"
+  mem: 1Gi
+  mount: all
+  emails: onfailure
+- name: duplicity-candidates
+  command: job duplicity-candidates
+  image: tool-wikidata-todo/tool-wikidata-todo:latest
+  schedule: "7 * * * *"
+  mount: all
+  emails: onfailure
+- name: merge-by-id-update
+  command: job merge-by-id-update
+  image: tool-wikidata-todo/tool-wikidata-todo:latest
+  schedule: "7 19 * * *"
+  mem: 1Gi
+  mount: all
+  emails: onfailure
+- name: pasleim-update
+  command: job pasleim-update
+  image: tool-wikidata-todo/tool-wikidata-todo:latest
+  schedule: "49 3 * * *"
+  mount: all
+  emails: onfailure
+- name: noitems-update
+  command: job noitems-update
+  image: tool-wikidata-todo/tool-wikidata-todo:latest
+  schedule: "12 4 * * *"
+  mount: all
+  emails: onfailure
+- name: user-scripts-update
+  command: job user-scripts-update
+  image: tool-wikidata-todo/tool-wikidata-todo:latest
+  schedule: "6 17 * * *"
+  mount: all
+  emails: onfailure
+# Still PHP: the Wikispecies bot, which edits Wikidata.
+- name: process-specieswiki
+  command: /data/project/wikidata-todo/scripts/duplicity_bot/process_specieswiki.php
+  image: php8.4
+  schedule: "7 17 * * *"
+  mem: 2Gi
+  mount: all
+  emails: onfailure
