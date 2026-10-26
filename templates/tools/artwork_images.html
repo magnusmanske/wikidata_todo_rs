@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Some random artists with a Creator page on Commons: their works on Wikidata without an image,
+and images of their works on Commons that have no Wikidata item (in “Artworks without Wikidata item”). Perhaps some match?
+<a href="/artwork_images/">Other artists</a>.</p>
+{% if artists.is_empty() %}
+<p class="muted">No artists with such images this time; please <a href="/artwork_images/">try again</a>.</p>
+{% else %}
+<ul class="columns">
+{% for artist in artists %}<li><a href="#artist{{ loop.index }}">{{ artist.name }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+{% for artist in artists %}
+<h2 id="artist{{ loop.index }}">{{ artist.name }}</h2>
+<p class="muted"><a href="https://www.wikidata.org/wiki/{{ artist.item }}">{{ artist.item }}</a> ·
+<a href="https://commons.wikimedia.org/wiki/Creator:{{ artist.name|urlencode }}">Creator page</a></p>
+<h3>Works without image</h3>
+{% if artist.works.is_empty() %}<p class="muted">None.</p>{% else %}
+<div class="table-wrap">
+<table>
+  <tbody>
+  {% for work in artist.works %}
+    <tr>
+      <td><a href="https://www.wikidata.org/wiki/{{ work.item }}">{{ work.item }}</a></td>
+      <td>{{ work.label }}{% if let Some(url) = work.described_at %} · <a href="{{ url }}"><i>described here</i></a>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if artist.more_works > 0 %}<p class="muted">And {{ artist.more_works }} more.</p>{% endif %}
+{% endif %}
+<h3>Images without item</h3>
+<div class="thumbs">
+{% for file in artist.files %}<a href="https://commons.wikimedia.org/wiki/File:{{ file|urlencode }}" title="{{ file }}"><img src="https://commons.wikimedia.org/wiki/Special:FilePath/{{ file|urlencode }}?width=128" alt="{{ file }}" loading="lazy"></a>
+{% endfor %}
+</div>
+{% if artist.more_files > 0 %}<p class="muted">And {{ artist.more_files }} more.</p>{% endif %}
+{% endfor %}
+{% endblock %}
