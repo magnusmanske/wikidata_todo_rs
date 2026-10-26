@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">A <a href="https://meta.wikimedia.org/wiki/BEACON">BEACON</a> generator, mapping Wikidata items to external IDs,
+from the <a href="https://query.wikidata.org/">Wikidata Query Service</a>: no more than a few minutes behind the live site.</p>
+<form method="get" action="/beacon/">
+  <label>Property <span class="hint">type to search; e.g. P214</span>
+    <input type="text" name="prop" list="properties" value="{{ request.prop }}" required></label>
+  <label>Source <span class="hint">empty for Wikidata items; for another property, the list has the items that have both, with the item as the message</span>
+    <input type="text" name="source" list="properties" value="{% if request.source != "0" %}{{ request.source }}{% endif %}" placeholder="Wikidata"></label>
+  <label>Wiki <span class="hint">optional: only items with an article there, e.g. enwiki</span>
+    <input type="text" name="site" value="{{ request.site }}"></label>
+  <button>Get BEACON data</button>
+</form>
+<p class="hint">Example: <a href="/beacon/?prop=P1015">Wikidata to BIBSYS</a>; <a href="/beacon/?prop=P434&amp;source=P214&amp;site=dewiki">VIAF to MusicBrainz, for items with an article on the German Wikipedia</a>.
+The largest properties (hundreds of thousands of IDs) may be too much for the query service; the list then ends in an <code>#ERROR</code> line.</p>
+
+<h2>Item translations</h2>
+<form method="get" action="/translate_items_with_property/" onsubmit="this.prop.value = this.prop.value.replace(/\D/g, '')">
+  <label>Labels of the items with property <input type="text" name="prop" list="properties" required></label>
+  <button>Get translations</button>
+</form>
+
+<datalist id="properties">
+{% for target in targets %}<option value="{{ target.id }}">{{ target.name }}</option>
+{% endfor %}
+</datalist>
+{% endblock %}
