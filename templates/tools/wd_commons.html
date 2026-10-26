@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Commons files and categories that link to Wikidata items, for the items of a Wikidata search (in any language) or of a query.
+Only explicit links (<code>[[d:Q…]]</code>, as in Wikidata infoboxes) count, not structured data such as “depicts”.</p>
+<form method="get" action="/wd_commons/">
+  <label>Search <span class="hint">any language</span>
+    <input type="text" name="query" value="{{ request.query }}" placeholder="Eiffelturm"></label>
+  <button>Search</button>
+</form>
+<p class="hint">Example: <a href="/wd_commons/?query=Eiffelturm">the Eiffel Tower, searched in German</a>.</p>
+<form method="get" action="/wd_commons/">
+  <label>Or a query <span class="hint">SPARQL, or WDQ as of old: {{ supported }}; the first 500 items</span>
+    <textarea class="code" name="wdq" rows="3">{{ request.wdq }}</textarea></label>
+  <button>Run query</button>
+</form>
+<p class="hint">Example: <a href="/wd_commons/?wdq=claim%5B31%3A12042110%5D">steel bridges</a>.</p>
+{% if let Some(results) = results %}
+<h2>{{ results.heading }}</h2>
+<p class="muted">{{ results.hits.len() }} of {{ results.items }} items have links from Commons.
+{% if let Some(url) = results.commons_search %}Try the <a href="{{ url }}">same search on Commons</a>.{% endif %}</p>
+<ul class="hits">
+{% for hit in results.hits %}
+  <li><strong><a href="https://www.wikidata.org/wiki/{{ hit.item }}">{{ hit.item }}</a></strong> {{ hit.text }}
+  {% if !hit.links.categories.is_empty() %}<br>Categories:
+    {% for category in hit.links.categories %}<a href="https://commons.wikimedia.org/wiki/Category:{{ category|urlencode }}">{{ category }}</a>{% if !loop.last %} · {% endif %}{% endfor %}
+  {% endif %}
+  {% if !hit.links.files.is_empty() %}
+  <div class="thumbs">
+    {% for file in hit.links.files %}<a href="https://commons.wikimedia.org/wiki/File:{{ file|urlencode }}" title="{{ file }}"><img src="https://commons.wikimedia.org/wiki/Special:FilePath/{{ file|urlencode }}?width=120" alt="{{ file }}" loading="lazy"></a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}
