@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Unlabeled items in your language around an item: the pages its Wikipedia articles link to, and their items.</p>
+<form method="get" action="/cloudy_concept/">
+  <div class="row">
+    <label>Item <input type="text" name="q" value="{{ q }}" placeholder="Q44461" required></label>
+    <label>Language <input type="text" name="lang" value="{{ lang }}" required></label>
+    <label>Fallback languages <span class="hint">a label in these counts too</span>
+      <input type="text" name="fallback" value="{{ fallback }}" placeholder="e.g. zh-hant,zh-hans">
+    </label>
+  </div>
+  <button>Cloud it</button>
+</form>
+<p class="hint">Examples: <a href="/cloudy_concept/?q=Q44461&amp;lang={{ lang }}">Q44461</a> ·
+<a href="/cloudy_concept/?q=Q4026244&amp;lang={{ lang }}">In the news</a>. A <code>mul</code> label (for all languages) counts as a label.</p>
+{% if let Some(cloud) = cloud %}
+<h2><a href="https://www.wikidata.org/wiki/{{ cloud.item }}">{{ cloud.item }}</a> ·
+{% if let Some(label) = cloud.label %}{{ label }}{% else %}<span class="error">No label in {{ lang }}</span>{% endif %}</h2>
+<p class="muted">{{ cloud.rows.len() }} items, linked from the articles on {{ cloud.wikis }} Wikipedias.</p>
+{% if cloud.failed > 0 %}<p class="error">{{ cloud.failed }} of the Wikipedias did not answer; their links are missing.</p>{% endif %}
+{% if !cloud.rows.is_empty() %}
+<p><button type="button" class="link" id="toggle">Show or hide items with labels</button> ·
+Adding labels needs a <a href="/api.php?action=authorize">Widar login</a>.</p>
+<div class="table-wrap">
+<table id="cloud">
+  <thead><tr><th>Item</th><th>Label [{{ lang }}]</th><th>Linked as</th><th class="num">Wikis</th></tr></thead>
+  <tbody>
+{% for row in cloud.rows %}
+  <tr class="{% if row.label.is_some() %}exists{% else %}missing{% endif %}">
+    <td><a href="https://www.wikidata.org/wiki/{{ row.item }}">{{ row.item }}</a>
+      <span class="hint"><a href="/cloudy_concept/?q={{ row.item }}&amp;lang={{ lang }}&amp;fallback={{ fallback }}" title="Concept cloud of this item">cloud</a> ·
+      <a href="https://reasonator.toolforge.org/?q={{ row.item }}&amp;lang={{ lang }}">Reasonator</a></span></td>
+    <td>{% match row.label %}{% when Some((label, language)) %}{{ label }}{% if let Some(language) = language %} <span class="muted">[{{ language }}]</span>{% endif %}
+      {% when None %}<span class="error">No label</span> <button type="button" class="link" data-q="{{ row.item }}" data-suggestion="{{ row.suggestion() }}">add</button>{% endmatch %}</td>
+    <td class="hint">{{ row.titles.join(" | ") }}</td>
+    <td class="num">{{ row.wikis }}</td>
+  </tr>
+{% endfor %}
+  </tbody>
+</table>
+</div>
+<script>
+// Hides and shows the items with a label; adds labels via Widar.
+(() => {
+  const table = document.getElementById('cloud');
+  document.getElementById('toggle').addEventListener('click', () => {
+    for (const tr of table.querySelectorAll('tr.exists')) tr.hidden = !tr.hidden;
+  });
+  table.addEventListener('click', async e => {
+    const button = e.target.closest('button[data-q]');
+    if (!button) return;
+    const label = prompt('New label in {{ lang }}', button.dataset.suggestion);
+    if (!label) return;
+    const body = new URLSearchParams({ action: 'set_label', q: button.dataset.q, lang: '{{ lang }}', label, botmode: '1' });
+    try {
+      const answer = await (await fetch('/api.php', { method: 'POST', body })).json();
+      if (answer.error !== 'OK') throw new Error(answer.error);
+      button.parentElement.textContent = label;
+      button.closest('tr').className = 'exists';
+    } catch (error) {
+      alert('Could not set the label: ' + error.message);
+    }
+  });
+})();
+</script>
+{% endif %}
+{% endif %}
+{% endblock %}

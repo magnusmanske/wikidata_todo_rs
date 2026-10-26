@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">The labels of Wikidata items, as a list.</p>
+<form method="post" action="/get_item_names/">
+  <div class="row">
+    <label>Preferred language <span class="hint">falls back on {{ languages }}</span>
+      <input type="text" name="lang" value="{{ request.lang }}" placeholder="e.g. de">
+    </label>
+    <label>or only language
+      <input type="text" name="onlylang" value="{{ request.onlylang }}">
+    </label>
+  </div>
+  <label>Items <span class="hint">one per line</span>
+    <textarea name="items" rows="6">{{ items }}</textarea>
+  </label>
+  <label>or PagePile ID
+    <input type="text" name="pagepile" value="{{ request.pagepile }}" inputmode="numeric">
+  </label>
+  <fieldset class="row">
+    <legend>Format</legend>
+    {% for (f, key, name) in formats %}<label class="check"><input type="radio" name="format" value="{{ key }}"{% if *f == format %} checked{% endif %}> {{ name }}</label>
+    {% endfor %}
+  </fieldset>
+  <button name="doit" value="1">Get names</button>
+</form>
+{% if let Some(names) = names %}
+<h2>{{ names.len() }} items</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Item</th><th>Label</th></tr></thead>
+  <tbody>
+{% for (q, label) in names %}  <tr><td><a href="https://www.wikidata.org/wiki/{{ q }}">{{ q }}</a></td><td>{{ label }}</td></tr>
+{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

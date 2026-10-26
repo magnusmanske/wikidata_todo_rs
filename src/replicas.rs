@@ -184,6 +184,22 @@ pub async fn linktarget_ids(conn: &mut Conn, namespace: i64, titles: &[&str]) ->
     select_in(conn, sql, "", &[namespace.into()], titles).await
 }
 
+/// Those of `titles` (namespace 0) that link to any of `targets` (see
+/// [`linktarget_ids`]); on Wikidata, items with any of some statements.
+pub async fn titles_linking_to(conn: &mut Conn, titles: &[String], targets: &[u64]) -> Result<HashSet<String>> {
+    if targets.is_empty() || titles.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let sql = format!(
+        "SELECT DISTINCT page_title FROM page JOIN pagelinks ON pl_from=page_id
+         WHERE pl_target_id IN ({}) AND page_namespace=0 AND page_title IN",
+        placeholders(targets.len())
+    );
+    let params: Vec<Value> = targets.iter().map(|id| Value::from(*id)).collect();
+    let rows: Vec<String> = select_in(conn, &sql, "", &params, titles).await?;
+    Ok(rows.into_iter().collect())
+}
+
 /// `sql` ends in `… IN`; runs it for `values` in chunks, with `params`
 /// before and `suffix` (e.g. `GROUP BY …`) after the list, and collects all rows.
 pub async fn select_in<T: FromRow + Send + 'static, V: Into<Value> + Clone>(
