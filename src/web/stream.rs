@@ -11,14 +11,14 @@ use wikimisc::mysql_async::{Conn, Params};
 /// Bytes collected before they are sent.
 const FLUSH_AT: usize = 64 * 1024;
 
-/// A body of `head`, then each row as `format` makes it (`None` skips the
-/// row; the flag says whether nothing came before), then `tail`. Returns once
-/// the query has started, so that a failing query is an error, not a cut-off
-/// body; a failure later on breaks off the body.
+/// A body of `head`, then each row of the queries (`(sql, params)`, run one
+/// after the other) as `format` makes it (`None` skips the row; the flag says
+/// whether nothing came before), then `tail`. Returns once the first query
+/// has started, so that its failure is an error, not a cut-off body; a later
+/// failure breaks off the body.
 pub async fn query_body<T, F>(
     mut conn: Conn,
-    sql: String,
-    params: Params,
+    queries: Vec<(String, Params)>,
     head: String,
     tail: String,
     mut format: F,
@@ -30,33 +30,41 @@ where
     let (started, has_started) = oneshot::channel::<anyhow::Result<()>>();
     let (sender, receiver) = mpsc::channel::<Result<Bytes, std::io::Error>>(4);
     tokio::spawn(async move {
-        let mut rows = match conn.exec_stream::<T, _, _>(sql, params).await {
-            Ok(rows) => rows,
-            Err(e) => {
-                let _ = started.send(Err(e.into()));
-                return;
-            }
-        };
-        let _ = started.send(Ok(()));
+        let mut started = Some(started);
         let mut buffer = head;
         let mut first = true;
-        while let Some(row) = rows.next().await {
-            let row = match row {
-                Ok(row) => row,
+        for (sql, params) in queries {
+            let mut rows = match conn.exec_stream::<T, _, _>(sql, params).await {
+                Ok(rows) => rows,
                 Err(e) => {
-                    tracing::warn!("streamed query failed: {e}");
-                    let _ = sender.send(Err(std::io::Error::other("query failed"))).await;
+                    match started.take() {
+                        Some(started) => drop(started.send(Err(e.into()))),
+                        None => fail(&sender, e).await,
+                    }
                     return;
                 }
             };
-            if let Some(text) = format(row, first) {
-                buffer.push_str(&text);
-                first = false;
+            if let Some(started) = started.take() {
+                let _ = started.send(Ok(()));
             }
-            // Stops when the client is gone.
-            if buffer.len() >= FLUSH_AT && sender.send(Ok(Bytes::from(std::mem::take(&mut buffer)))).await.is_err() {
-                return;
+            while let Some(row) = rows.next().await {
+                let row = match row {
+                    Ok(row) => row,
+                    Err(e) => return fail(&sender, e).await,
+                };
+                if let Some(text) = format(row, first) {
+                    buffer.push_str(&text);
+                    first = false;
+                }
+                // Stops when the client is gone.
+                if buffer.len() >= FLUSH_AT && sender.send(Ok(Bytes::from(std::mem::take(&mut buffer)))).await.is_err()
+                {
+                    return;
+                }
             }
+        }
+        if let Some(started) = started.take() {
+            let _ = started.send(Ok(()));
         }
         buffer.push_str(&tail);
         let _ = sender.send(Ok(Bytes::from(buffer))).await;
@@ -66,4 +74,10 @@ where
         receiver.recv().await.map(|chunk| (chunk, receiver))
     });
     Ok(Body::from_stream(chunks))
+}
+
+/// Breaks off the body.
+async fn fail(sender: &mpsc::Sender<Result<Bytes, std::io::Error>>, e: wikimisc::mysql_async::Error) {
+    tracing::warn!("streamed query failed: {e}");
+    let _ = sender.send(Err(std::io::Error::other("query failed"))).await;
 }

@@ -71,7 +71,7 @@ pub async fn handler(
         Some(callback) => (format!("{callback}(["), "])".to_string()),
         None => ("[".to_string(), "]".to_string()),
     };
-    let body = query_body(conn, sql.to_string(), params, head, tail, |title: String, first| {
+    let body = query_body(conn, vec![(sql.to_string(), params)], head, tail, |title: String, first| {
         let quoted = serde_json::to_string(&title).ok()?;
         Some(if first { quoted } else { format!(",{quoted}") })
     })
