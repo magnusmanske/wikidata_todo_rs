@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">All the categories a page or file is in, all the way up to the turtles.</p>
+<form method="get" action="/reverse_tree/">
+  <div class="row">
+    <label>Language <input type="text" name="language" value="{{ request.language }}" required></label>
+    <label>Project <input type="text" name="project" value="{{ request.project }}" required></label>
+  </div>
+  <div class="row">
+    <label>Title <input type="text" name="title" value="{{ request.title }}" required></label>
+    <label>Namespace <span class="hint">0: articles, 6: files, 14: categories</span>
+      <input type="number" name="namespace" value="{{ namespace }}"></label>
+  </div>
+  <button name="doit" value="1">Show the tree</button>
+</form>
+{% if let Some(tree) = tree %}
+<p><a href="{{ tree.permalink }}">Permalink</a> · <a href="#stats">Statistics</a> · <a href="#all">All categories</a></p>
+<h2>Category reverse tree</h2>
+{% for level in tree.levels %}
+{% let first_level = loop.first %}
+<h3>Level {{ loop.index }}</h3>
+<ul>
+{% for edge in level %}
+  <li>{% if first_level %}{{ crate::replicas::display_title(edge.child) }}{% else %}<a href="#14.{{ edge.child }}">{{ crate::replicas::display_title(edge.child) }}</a>{% endif %}
+    is in category <i id="14.{{ edge.parent }}">{{ crate::replicas::display_title(edge.parent) }}</i>
+    <a class="hint" href="{{ tree.category_url }}{{ edge.parent|urlencode }}" title="The category page">[W]</a></li>
+{% endfor %}
+</ul>
+{% else %}
+<p class="muted">This page is in no category.</p>
+{% endfor %}
+<h2 id="stats">Statistics</h2>
+<p>Maximum depth: {{ tree.levels.len() }} levels. Categories along the way: {{ tree.categories.len() }}.</p>
+{% if tree.truncated %}<p class="muted">The tree is larger; it was cut off after {{ tree.categories.len() }} categories.</p>{% endif %}
+<h2 id="all">All categories in the reverse tree</h2>
+<ul class="columns">
+{% for category in tree.categories %}<li><a href="{{ tree.category_url }}{{ category|urlencode }}">{{ crate::replicas::display_title(category) }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}
