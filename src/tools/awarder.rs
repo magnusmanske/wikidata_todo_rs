@@ -23,7 +23,8 @@ use wikimisc::mysql_async::prelude::Queryable;
 /// "award"
 const AWARD: &str = "Q618779";
 const HUMAN: &str = "Q5";
-const LANGUAGES: &[&str] = &["en", "de", "es", "fr", "it", "ru"];
+/// "mul" holds the labels common to many languages.
+const LANGUAGES: &[&str] = &["en", "mul", "de", "es", "fr", "it", "ru"];
 const CONCURRENCY: usize = 4;
 /// Linked recipients read from the wikitext, at most.
 const MAX_RECIPIENTS: usize = 5000;

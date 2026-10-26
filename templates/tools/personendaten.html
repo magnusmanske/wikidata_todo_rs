@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% macro date(prefix, n, day, month, year) %}
+<select name="{{ prefix }}_tag{{ n }}" aria-label="Tag"><option value="0"></option>
+{% for d in 1..=31 %}<option{% if day.trim() == d.to_string() %} selected{% endif %}>{{ d }}</option>{% endfor %}
+</select>
+<select name="{{ prefix }}_monat{{ n }}" aria-label="Monat"><option value="0"></option>
+{% for m in months %}<option value="{{ loop.index }}"{% if month.trim() == loop.index.to_string() %} selected{% endif %}>{{ m }}</option>{% endfor %}
+</select>
+<input type="text" name="{{ prefix }}_jahr{{ n }}" value="{{ year }}" placeholder="Jahr" size="5" aria-label="Jahr">
+{% endmacro %}
+{% macro art(name, value, arts) %}
+<select name="{{ name }}" class="art" aria-label="Art">
+{% for (v, text) in arts %}<option value="{{ v }}"{% if value.trim() == *v %} selected{% endif %}>{{ text }}</option>{% endfor %}
+</select>
+{% endmacro %}
+{% block content %}
+<p class="lead">Wikipedia-Personensuche: Menschen auf Wikidata, nach Name, Beschreibung, Lebensdaten, Staat und Geschlecht.</p>
+<form method="get" action="/personendaten/">
+  <label>Name <input type="text" name="name" value="{{ request.name }}"></label>
+  <label>Beschreibung <input type="text" name="desc" value="{{ request.desc }}"></label>
+  <fieldset>
+    <legend>Geboren</legend>
+    <div class="row">{% call art("geb_art", request.geb_art, birth_arts) %}{% endcall %}
+      {% call date("geb", 1, request.geb_tag1, request.geb_monat1, request.geb_jahr1) %}{% endcall %}</div>
+    <div class="row second">und {% call date("geb", 2, request.geb_tag2, request.geb_monat2, request.geb_jahr2) %}{% endcall %}</div>
+    <label>in <input type="text" name="geb_ort" value="{{ request.geb_ort }}"></label>
+  </fieldset>
+  <fieldset>
+    <legend>Gestorben</legend>
+    <div class="row">{% call art("st_art", request.st_art, death_arts) %}{% endcall %}
+      {% call date("st", 1, request.st_tag1, request.st_monat1, request.st_jahr1) %}{% endcall %}</div>
+    <div class="row second">und {% call date("st", 2, request.st_tag2, request.st_monat2, request.st_jahr2) %}{% endcall %}</div>
+    <label>in <input type="text" name="st_ort" value="{{ request.st_ort }}"></label>
+  </fieldset>
+  <div class="row">
+    <label>Staat
+      <select name="staat"><option value="">Keine Beschränkung</option>
+      {% for (q, name) in countries %}<option value="{{ q }}"{% if request.staat.trim() == q %} selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+      </select></label>
+    <label>Geschlecht
+      <select name="sex"><option value="">Keine Beschränkung</option>
+        <option value="1"{% if request.sex == "1" %} selected{% endif %}>Männer</option>
+        <option value="2"{% if request.sex == "2" %} selected{% endif %}>Frauen</option>
+      </select></label>
+  </div>
+  <p class="hint">Name und Beschreibung gehen an die Wikidata-Suche; Orte müssen genau so heißen wie ihr Wikidata-Objekt.</p>
+  <button>Suchen</button>
+</form>
+{% if let Some(error) = error %}<p class="error">{{ error }}</p>{% endif %}
+{% if let Some(results) = results %}
+<h2>{{ results.len() }} Personen gefunden</h2>
+{% if results.len() >= max_results %}<p class="muted">Höchstens {{ max_results }} werden gezeigt.</p>{% endif %}
+{% if !results.is_empty() %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Beschreibung</th><th>Geboren</th><th>Gestorben</th></tr></thead>
+  <tbody>
+  {% for p in results %}
+  <tr><td><a href="https://www.wikidata.org/wiki/{{ p.item }}">{{ p.label }}</a></td><td>{{ p.description }}</td>
+    <td>{{ p.born }}{% if !p.birth_place.is_empty() %}<br><span class="muted">{{ p.birth_place }}</span>{% endif %}</td>
+    <td>{{ p.died }}{% if !p.death_place.is_empty() %}<br><span class="muted">{{ p.death_place }}</span>{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endif %}
+<script>
+// The second date only counts for "zwischen".
+for (const select of document.querySelectorAll('select.art')) {
+  const second = select.closest('fieldset').querySelector('.second');
+  const update = () => { second.hidden = select.value !== '4'; };
+  select.addEventListener('change', update);
+  update();
+}
+</script>
+{% endblock %}

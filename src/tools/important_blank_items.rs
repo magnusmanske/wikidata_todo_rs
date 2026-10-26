@@ -16,7 +16,8 @@ use std::sync::Arc;
 
 const FILE: &str = "no_items.50K.tab";
 const MAX_SIZE: usize = 500;
-const LANGUAGES: &[&str] = &["en", "de", "es", "fr", "it"];
+/// "mul" holds the labels common to many languages.
+const LANGUAGES: &[&str] = &["en", "mul", "de", "es", "fr", "it"];
 
 #[derive(Debug, Deserialize)]
 pub struct Request {

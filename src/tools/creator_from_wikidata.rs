@@ -44,7 +44,7 @@ pub async fn handler(
     match wikidata::entity(&state.http, &q, "labels").await? {
         None => page.error = Some(format!("There is no item {q}.")),
         Some(item) => {
-            let label = wikimisc::labels::json_term_or_any(&item, "labels", &["en"]).unwrap_or(&q);
+            let label = wikimisc::labels::json_term_or_any(&item, "labels", &["en", "mul"]).unwrap_or(&q);
             page.creator = Some(Creator {
                 wikitext: template(&q),
                 edit_url: format!(

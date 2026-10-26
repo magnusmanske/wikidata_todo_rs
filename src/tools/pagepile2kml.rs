@@ -15,6 +15,8 @@ use serde::Deserialize;
 use std::sync::Arc;
 use wikimisc::escape;
 
+/// Label languages; "mul" holds the labels common to many languages.
+const LANGUAGES: &[&str] = &["en", "mul", "de", "fr", "es", "it", "nl"];
 /// Items per query.
 const BATCH: usize = 500;
 const CONCURRENCY: usize = 4;
@@ -97,7 +99,7 @@ async fn placemarks(state: &AppState, items: &[String]) -> anyhow::Result<Vec<Pl
         }
     }
     let ids: Vec<String> = placemarks.iter().map(|p| p.item.clone()).collect();
-    let labels = terms::labels(&state.replicas, &ids, terms::DEFAULT_LANGUAGES).await?;
+    let labels = terms::labels(&state.replicas, &ids, LANGUAGES).await?;
     for p in &mut placemarks {
         p.label = labels.get(&p.item).cloned().unwrap_or_else(|| p.item.clone());
     }
