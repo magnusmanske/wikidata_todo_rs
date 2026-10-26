@@ -28,7 +28,8 @@ const MAX_SHOWN: usize = 200;
 const NS_CREATOR: i64 = 100;
 const NS_CATEGORY: i64 = 14;
 const CATEGORY: &str = "Artworks_without_Wikidata_item";
-const LANGUAGES: &[&str] = &["en", "de", "fr", "es", "it", "pl", "pt", "ja", "ru", "hu"];
+/// Labels in the first of these that has one, else in any language.
+const LANGUAGES: &[&str] = &["en", "de", "fr", "es", "it", "pl", "pt", "ja", "ru", "hu", "nl"];
 
 /// `(item, Creator page as database title)` of all artists that have one.
 static CREATORS: TimedCache<Vec<(String, String)>> = TimedCache::new(Duration::from_secs(24 * 3600));
@@ -146,7 +147,14 @@ async fn works_without_image(state: &AppState, artists: &[String]) -> anyhow::Re
         })
         .collect();
     let items: Vec<String> = rows.iter().map(|(_, work, _)| work.clone()).collect();
-    let labels = terms::labels(&state.replicas, &items, LANGUAGES).await?;
+    let mut labels = terms::labels(&state.replicas, &items, LANGUAGES).await?;
+    // Else in any language.
+    let unlabelled: Vec<String> = items.iter().filter(|i| !labels.contains_key(*i)).cloned().collect();
+    if !unlabelled.is_empty() {
+        for term in terms::terms(&state.replicas, &unlabelled, &[terms::TermType::Label], &[]).await? {
+            labels.entry(term.entity).or_insert(term.text);
+        }
+    }
     let mut works: HashMap<String, Vec<Work>> = HashMap::new();
     for (creator, item, described_at) in rows {
         let label = labels.get(&item).cloned().unwrap_or_default();
