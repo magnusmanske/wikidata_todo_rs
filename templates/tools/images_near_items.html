@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Commons files with coordinates in a category tree, next to Wikidata items of a class that have coordinates but no image: pairs that are close may be a match.</p>
+<form method="get" action="/images_near_items/">
+  <div class="row">
+    <label>Root category <input type="text" name="category" value="{{ request.category }}" placeholder="K8 Telephone booths" required></label>
+    <label>Depth <input type="number" name="depth" min="0" max="10" value="{{ depth }}"></label>
+  </div>
+  <div class="row">
+    <label>Instance of (or subclass) <input type="text" name="p31" value="{{ request.p31 }}" placeholder="Q712868" required></label>
+    <label>Max. distance (meters) <input type="number" name="max_distance_m" min="1" max="10000" value="{{ max_distance_m }}"></label>
+  </div>
+  <button>Find pairs</button>
+</form>
+<p>Example: <a href="/images_near_items/?category=Telephone+booths+in+the+United+Kingdom&amp;depth=5&amp;p31=Q712868&amp;max_distance_m=50">UK red telephone booths</a>.</p>
+{% if let Some(results) = results %}
+<h2>{{ results.pairs.len() }} pairs found</h2>
+<p class="hint">Of {{ results.files }} files with coordinates (at most {{ max_files }} files are looked at) and {{ results.items }} items without image.</p>
+{% if results.truncated %}<p class="muted">There are more pairs; these are the first {{ results.pairs.len() }}.</p>{% endif %}
+<ul>
+{% for pair in results.pairs %}
+  <li>File <a href="{{ pair.file_url }}">{{ pair.file }}</a> was taken {{ pair.distance_m }} meters from
+    <a href="https://www.wikidata.org/wiki/{{ pair.item }}">{{ pair.label }}</a> <span class="muted">{{ pair.item }}</span></li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}
