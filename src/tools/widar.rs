@@ -18,9 +18,11 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Json, Response};
 use claims::ClaimValue;
 use editor::{Editor, Failure, Target};
+use regex::Regex;
 use serde_json::{Map, Value, json};
+use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 const SESSION: Session = Session { name: "wdt_oauth", path: "/" };
 /// Wikidata entities per `set_claims` request: each edit takes over a second.
@@ -189,6 +191,8 @@ struct Extras {
     result: Option<Value>,
     /// `generic`: PHP's `json_last_error()` code of the request's JSON.
     jle: u8,
+    /// A new item, which the item creator (`creator.html`) reads (the PHP never said).
+    q: Option<String>,
 }
 
 /// PHP's `json_last_error()` for a syntax error.
@@ -240,13 +244,16 @@ async fn act(
             }
             done(editor.set_sitelink(q, site, title).await, "Problem creating sitelink".to_string())
         }
-        "create_blank_item" => done(editor.create_item(&json!({})).await, "Problem creating blank item".to_string()),
-        "create_item_from_page" => {
+        "create_blank_item" | "create_item_from_page" => {
             let (site, page) = (get("site").trim(), get("page").trim());
-            if site.is_empty() || page.is_empty() {
-                return Err("Needs site and page".into());
-            }
-            done(editor.create_item(&item_from_page(site, page)).await, "Problem creating item".to_string())
+            let (data, failure) = match action {
+                "create_blank_item" => (json!({}), "Problem creating blank item"),
+                _ if site.is_empty() || page.is_empty() => return Err("Needs site and page".into()),
+                _ => (item_from_page(site, page), "Problem creating item"),
+            };
+            done(editor.create_item(&data).await, failure.to_string())?;
+            extras.q = editor.last.as_ref().and_then(|a| a["entity"]["id"].as_str()).map(str::to_string);
+            Ok(())
         }
         "remove_claim" => {
             let baserev = get("baserev").trim();
@@ -367,25 +374,9 @@ fn item_from_page(site: &str, page: &str) -> Value {
 }
 
 /// `Paris (Texas)` → `Paris`.
-fn without_disambiguation(title: &str) -> &str {
-    let Some(inner) = title.strip_suffix(')') else { return title };
-    let bytes = inner.as_bytes();
-    // The first run of white space that is followed by `(` and at least one character.
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i].is_ascii_whitespace() {
-            let start = i;
-            while i < bytes.len() && bytes[i].is_ascii_whitespace() {
-                i += 1;
-            }
-            if i + 1 < bytes.len() && bytes[i] == b'(' && start > 0 {
-                return title.get(..start).unwrap_or(title);
-            }
-        } else {
-            i += 1;
-        }
-    }
-    title
+fn without_disambiguation(title: &str) -> Cow<'_, str> {
+    static DISAMBIGUATION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s+\(.+\)$").expect("valid regex"));
+    DISAMBIGUATION.replace(title, "")
 }
 
 /// The JSON answer, as `Widar::render_reponse`.
@@ -402,6 +393,9 @@ fn answer(outcome: Result<(), Failure>, last: Option<Value>, error2: String, ext
     out.insert("jle".to_string(), extras.jle.into());
     out.insert("res".to_string(), last.unwrap_or_else(|| json!("")));
     out.insert("result".to_string(), extras.result.unwrap_or_else(|| json!("")));
+    if let Some(q) = extras.q {
+        out.insert("q".to_string(), q.into());
+    }
     Json(Value::Object(out)).into_response()
 }
 
