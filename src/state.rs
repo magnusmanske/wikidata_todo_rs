@@ -45,7 +45,11 @@ impl AppState {
         Ok(Self {
             sparql: Sparql::new(http.clone())?,
             replicas: Replicas::new(&config.replica_credentials)?,
-            tool_db: ToolDb::new(config.tool_db_url.as_deref(), &config.replica_credentials)?,
+            tool_db: ToolDb::new(
+                config.tool_db_url.as_deref(),
+                config.tool_db_owner.as_deref(),
+                &config.replica_credentials,
+            )?,
             cookie_key,
             oauth,
             http,

@@ -21,6 +21,10 @@ pub struct Config {
     /// For development: a `mysql://` URL (without database) to use instead of ToolsDB.
     #[serde(default)]
     pub tool_db_url: Option<String>,
+    /// For development: whose databases to use (e.g. `s51211`), if not the
+    /// credentials' own. Other tools' `_p` databases are readable to all.
+    #[serde(default)]
+    pub tool_db_owner: Option<String>,
     /// Where this service is reachable, for OAuth callbacks.
     #[serde(default = "default_public_url")]
     pub public_url: String,
