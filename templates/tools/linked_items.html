@@ -10,7 +10,7 @@
   <label>or pages <span class="hint">one per line, at most {{ max_pages }}</span>
     <textarea name="pages" rows="5">{{ request.pages }}</textarea></label>
   <label>or wikitext <textarea name="wikitext" rows="8">{{ request.wikitext }}</textarea></label>
-  <label>or a PagePile <span class="hint">instead of all the above; its own wiki counts</span>
+  <label>or a PagePile <span class="hint">instead of all the above; its own wiki counts; its first 50,000 pages</span>
     <input type="number" name="pagepile" value="{{ request.pagepile }}" placeholder="PagePile ID"></label>
   <label class="check"><input type="checkbox" name="ignore_templates" value="1"{% if request.ignore_templates.is_some() %} checked{% endif %}> Ignore links inside templates (e.g. navboxes); not for PagePiles</label>
   <fieldset>

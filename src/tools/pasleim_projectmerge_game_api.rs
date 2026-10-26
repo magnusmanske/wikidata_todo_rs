@@ -12,7 +12,6 @@ use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
 
 const CANDIDATES_FILE: &str = "pasleim_projectmerge.json";
 const LOG_FILE: &str = "pasleim_projectmerge_game.log";
@@ -114,8 +113,7 @@ fn pick(candidates: Vec<Pair>, done: &HashSet<String>, n: usize) -> Vec<Pair> {
 
 async fn log_action(dir: &Path, request: &Request) -> anyhow::Result<Value> {
     if let (Some(pair), Some(line)) = (Pair::parse(&request.tile), request.decision().and_then(log_line)) {
-        let mut log = tokio::fs::OpenOptions::new().create(true).append(true).open(dir.join(LOG_FILE)).await?;
-        log.write_all(format!("{}\t{line}\n", pair.id()).as_bytes()).await?;
+        crate::append::line_once(&dir.join(LOG_FILE), &format!("{}\t{line}", pair.id())).await?;
     }
     Ok(game::logged())
 }

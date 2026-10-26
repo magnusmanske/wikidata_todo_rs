@@ -11,7 +11,6 @@ use serde::Deserialize;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
 
 /// Page titles are at most 255 bytes.
 const MAX_TITLE: usize = 255;
@@ -32,10 +31,7 @@ pub async fn api(State(state): State<Arc<AppState>>, Params(request): Params<Req
     let list = has_image_file(&state.config.public_html.join("wp_no_image"), &request.wiki)
         .await
         .ok_or_else(|| AppError::BadRequest(format!("No list for wiki '{}'", request.wiki)))?;
-    let mut file =
-        tokio::fs::OpenOptions::new().create(true).append(true).open(&list).await.map_err(anyhow::Error::from)?;
-    // One write per line, so that concurrent appends do not interleave.
-    file.write_all(format!("{page}\n").as_bytes()).await.map_err(anyhow::Error::from)?;
+    crate::append::line_once(&list, &page).await?;
     Ok(Json(json!({"status": "OK"})).into_response())
 }
 

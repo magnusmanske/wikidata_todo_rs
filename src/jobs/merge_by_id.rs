@@ -7,7 +7,7 @@ use crate::replicas::{placeholders, select_in};
 use crate::sparql::entity_id;
 use crate::state::AppState;
 use crate::tool_db::Database;
-use anyhow::Result;
+use anyhow::{Result, bail};
 use std::collections::{HashMap, HashSet};
 use wikimisc::mysql_async::Conn;
 use wikimisc::mysql_async::prelude::Queryable;
@@ -17,6 +17,8 @@ const IGNORED: &[&str] = &["P709", "P638", "P484", "P594", "P705", "P1566", "P22
 /// The width of the `value` column.
 const MAX_VALUE_CHARS: usize = 32;
 const WRITE_CHUNK: usize = 1000;
+/// From this many open pairs on, a result with less than half of them is suspect.
+const MIN_OPEN_FOR_CHECK: usize = 100;
 
 pub async fn update(state: &AppState, only: &[String], writes: Writes) -> Result<()> {
     let properties = match only.is_empty() {
@@ -71,7 +73,12 @@ async fn update_property(state: &AppState, tool: &mut Conn, property: &str, numb
         writes.exec(tool, &sql, params).await?;
     }
 
-    // Open pairs that no longer share the value.
+    // Open pairs that no longer share the value; unless so many vanished
+    // at once that the result looks incomplete.
+    let open = existing.iter().filter(|(.., done)| done == "OPEN").count();
+    if open >= MIN_OPEN_FOR_CHECK && pairs.len() * 2 < open {
+        bail!("only {} pairs, against {open} open ones: not deleting any", pairs.len());
+    }
     let gone: Vec<u64> = existing
         .iter()
         .filter(|(_, q1, q2, done)| done == "OPEN" && !pairs.contains_key(&(*q1, *q2)))
@@ -95,7 +102,10 @@ async fn pairs(state: &AppState, property: &str) -> Result<HashMap<(u64, u64), S
     for row in csv.records() {
         let row = row?;
         let number = |i: usize| row.get(i).and_then(entity_id).and_then(|id| id.strip_prefix('Q')?.parse::<u64>().ok());
-        let (Some(a), Some(b), Some(value)) = (number(0), number(1), row.get(2)) else { continue };
+        // WDQS can break off a result midway, with an error message in it.
+        let (Some(a), Some(b), Some(value)) = (number(0), number(1), row.get(2)) else {
+            bail!("unreadable result row, the result may be incomplete: {row:?}");
+        };
         pairs.insert((a.min(b), a.max(b)), value.chars().take(MAX_VALUE_CHARS).collect());
     }
     Ok(pairs)

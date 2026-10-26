@@ -17,6 +17,7 @@ use axum::response::Html;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use wikimisc::mysql_async::prelude::Queryable;
 
@@ -66,6 +67,8 @@ struct Page {
 
 static LANGLINKS: TimedCache<Stats> = TimedCache::new(KEEP_FOR);
 static LABELS: TimedCache<Stats> = TimedCache::new(KEEP_FOR);
+/// Whether the numbers of each mode are being computed.
+static RUNNING: [AtomicBool; 2] = [AtomicBool::new(false), AtomicBool::new(false)];
 
 pub async fn handler(
     State(state): State<Arc<AppState>>,
@@ -75,17 +78,30 @@ pub async fn handler(
         "labels" => Mode::Labels,
         _ => Mode::Langlinks,
     };
-    // In a task of its own, so the numbers are done even if nobody waits for them.
-    let task = tokio::spawn(async move {
-        match mode {
-            Mode::Langlinks => LANGLINKS.get_or_fetch(async || langlinks(&state).await).await,
-            Mode::Labels => LABELS.get_or_fetch(async || labels(&state).await).await,
-        }
-    });
-    let stats = match tokio::time::timeout(WAIT, task).await {
-        Ok(joined) => Some(joined.map_err(|e| AppError::Internal(e.to_string()))??),
-        Err(_) => None,
+    let (cache, running) = match mode {
+        Mode::Langlinks => (&LANGLINKS, &RUNNING[0]),
+        Mode::Labels => (&LABELS, &RUNNING[1]),
     };
+    // In a task of its own, so the numbers are done even if nobody waits;
+    // and only one at a time, however many requests come meanwhile.
+    if cache.peek().is_none() && !running.swap(true, Ordering::SeqCst) {
+        tokio::spawn(async move {
+            let result = match mode {
+                Mode::Langlinks => LANGLINKS.get_or_fetch(async || langlinks(&state).await).await,
+                Mode::Labels => LABELS.get_or_fetch(async || labels(&state).await).await,
+            };
+            if let Err(e) = result {
+                tracing::warn!("project_stats: {e:#}");
+            }
+            running.store(false, Ordering::SeqCst);
+        });
+    }
+    let waited = std::time::Instant::now();
+    let mut stats = cache.peek();
+    while stats.is_none() && waited.elapsed() < WAIT {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        stats = cache.peek();
+    }
     let page = Page {
         title: "Project stats",
         mode,

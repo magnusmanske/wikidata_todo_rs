@@ -5,7 +5,7 @@ use super::Writes;
 use crate::mediawiki;
 use crate::state::AppState;
 use crate::wiki::Wiki;
-use anyhow::Result;
+use anyhow::{Result, bail};
 use regex::Regex;
 use std::collections::BTreeSet;
 use std::sync::LazyLock;
@@ -27,6 +27,10 @@ pub async fn update(state: &AppState, writes: Writes) -> Result<()> {
             pairs.extend(self::pairs(&text));
         }
     }
+    // An empty list means trouble, not "no pairs": keep the old file.
+    if pairs.is_empty() {
+        bail!("no pairs found on {} pages", titles.len());
+    }
     let json: Vec<[u64; 2]> = pairs.iter().map(|(a, b)| [*a, *b]).collect();
     let path = state.config.public_html.join("pasleim_projectmerge.json");
     writes.file(&path, serde_json::to_string(&json)?.as_bytes()).await?;
@@ -39,7 +43,7 @@ async fn wikitexts(http: &reqwest::Client, wiki: &Wiki, titles: &[String]) -> Re
     let titles = titles.join("|");
     let params =
         [("action", "query"), ("prop", "revisions"), ("rvprop", "content"), ("rvslots", "main"), ("titles", &titles)];
-    let json = mediawiki::api(http, wiki, &params).await?;
+    let json = api(http, wiki, &params).await?;
     let pages = json["query"]["pages"].as_array().into_iter().flatten();
     Ok(pages.filter_map(|p| p["revisions"][0]["slots"]["main"]["content"].as_str().map(str::to_string)).collect())
 }
@@ -58,7 +62,7 @@ async fn subpages(http: &reqwest::Client, wiki: &Wiki) -> Result<Vec<String>> {
         if let Some(c) = &cont {
             params.push(("apcontinue", c));
         }
-        let json = mediawiki::api(http, wiki, &params).await?;
+        let json = api(http, wiki, &params).await?;
         let pages = json["query"]["allpages"].as_array().into_iter().flatten();
         titles.extend(pages.filter_map(|p| p["title"].as_str().map(str::to_string)));
         cont = json["continue"]["apcontinue"].as_str().map(str::to_string);
@@ -66,6 +70,15 @@ async fn subpages(http: &reqwest::Client, wiki: &Wiki) -> Result<Vec<String>> {
             return Ok(titles);
         }
     }
+}
+
+/// An API request; an answer with an error is an error.
+async fn api(http: &reqwest::Client, wiki: &Wiki, params: &[(&str, &str)]) -> Result<serde_json::Value> {
+    let json = mediawiki::api_patiently(http, wiki, params).await?;
+    if let Some(error) = json.get("error") {
+        bail!("API error: {error}");
+    }
+    Ok(json)
 }
 
 /// The item pairs in a page's wikitext, each as `(smaller, larger)` number.

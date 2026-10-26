@@ -19,6 +19,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 const MAX_PAGES: usize = 500;
+/// Pages taken from a PagePile.
+const MAX_PILE_PAGES: usize = 50_000;
 const CONCURRENCY: usize = 4;
 
 #[derive(Debug, Deserialize)]
@@ -91,9 +93,9 @@ async fn results(state: &AppState, request: &Request) -> Result<Results, AppErro
         }
         pile => {
             let id = pile.parse().map_err(|_| AppError::BadRequest("The PagePile ID must be a number.".into()))?;
-            let pile = pagepile::get(&state.http, id).await?;
+            let pile = pagepile::get(&state.http, id, MAX_PILE_PAGES).await?;
             let wiki = Wiki::from_dbname(&pile.wiki)?;
-            (wiki, pile.pages.iter().map(|p| db_title(p)).collect(), vec![])
+            (wiki, pile.pages.iter().take(MAX_PILE_PAGES).map(|p| db_title(p)).collect(), vec![])
         }
     };
     let titles = follow_redirects(state, &wiki, titles).await?;

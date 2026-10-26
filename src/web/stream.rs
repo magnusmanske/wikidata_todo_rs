@@ -10,6 +10,16 @@ use wikimisc::mysql_async::{Conn, Params};
 
 /// Bytes collected before they are sent.
 const FLUSH_AT: usize = 64 * 1024;
+/// A client that reads nothing for this long is given up on, so that it
+/// does not hold a database connection.
+const SEND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+type Sender = mpsc::Sender<Result<Bytes, std::io::Error>>;
+
+/// Sends a chunk; false if the client is gone or stalled.
+async fn send(sender: &Sender, chunk: Result<Bytes, std::io::Error>) -> bool {
+    matches!(tokio::time::timeout(SEND_TIMEOUT, sender.send(chunk)).await, Ok(Ok(())))
+}
 
 /// A body of `head`, then each row of the queries (`(sql, params)`, run one
 /// after the other) as `format` makes it (`None` skips the row; the flag says
@@ -57,8 +67,7 @@ where
                     first = false;
                 }
                 // Stops when the client is gone.
-                if buffer.len() >= FLUSH_AT && sender.send(Ok(Bytes::from(std::mem::take(&mut buffer)))).await.is_err()
-                {
+                if buffer.len() >= FLUSH_AT && !send(&sender, Ok(Bytes::from(std::mem::take(&mut buffer)))).await {
                     return;
                 }
             }
@@ -67,7 +76,7 @@ where
             let _ = started.send(Ok(()));
         }
         buffer.push_str(&tail);
-        let _ = sender.send(Ok(Bytes::from(buffer))).await;
+        send(&sender, Ok(Bytes::from(buffer))).await;
     });
     has_started.await.map_err(|_| AppError::Internal("query task ended".to_string()))??;
     let chunks = futures::stream::unfold(receiver, |mut receiver| async move {
@@ -77,7 +86,7 @@ where
 }
 
 /// Breaks off the body.
-async fn fail(sender: &mpsc::Sender<Result<Bytes, std::io::Error>>, e: wikimisc::mysql_async::Error) {
+async fn fail(sender: &Sender, e: wikimisc::mysql_async::Error) {
     tracing::warn!("streamed query failed: {e}");
-    let _ = sender.send(Err(std::io::Error::other("query failed"))).await;
+    send(sender, Err(std::io::Error::other("query failed"))).await;
 }

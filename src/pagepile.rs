@@ -27,11 +27,12 @@ struct Data {
     status: Option<String>,
 }
 
-pub async fn get(http: &reqwest::Client, id: u64) -> Result<Pile> {
-    let id_s = id.to_string();
+/// A pile; at most its first `limit` pages, as piles can be huge.
+pub async fn get(http: &reqwest::Client, id: u64, limit: usize) -> Result<Pile> {
+    let (id_s, limit) = (id.to_string(), limit.to_string());
     let data: Data = http
         .get(API)
-        .query(&[("id", id_s.as_str()), ("action", "get_data"), ("format", "json"), ("doit", "1")])
+        .query(&[("id", id_s.as_str()), ("action", "get_data"), ("format", "json"), ("doit", "1"), ("limit", &limit)])
         .send()
         .await
         .and_then(reqwest::Response::error_for_status)
@@ -46,9 +47,12 @@ pub async fn get(http: &reqwest::Client, id: u64) -> Result<Pile> {
 }
 
 /// The Wikidata items of a pile: its `Q…` pages for a Wikidata pile, else the
-/// items of its namespace-0 pages (pages without an item are left out).
-pub async fn items(http: &reqwest::Client, replicas: &Replicas, id: u64) -> Result<Vec<String>> {
-    let pile = get(http, id).await?;
+/// items of its namespace-0 pages (pages without an item are left out); of
+/// at most its first `limit` pages.
+pub async fn items(http: &reqwest::Client, replicas: &Replicas, id: u64, limit: usize) -> Result<Vec<String>> {
+    let mut pile = get(http, id, limit).await?;
+    // In case PagePile ignores the limit.
+    pile.pages.truncate(limit);
     if pile.wiki == "wikidatawiki" {
         return Ok(pile.pages.into_iter().filter(|p| p.starts_with('Q')).collect());
     }

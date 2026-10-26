@@ -14,6 +14,12 @@ impl<T> TimedCache<T> {
         Self { max_age, slot: Mutex::const_new(None) }
     }
 
+    /// The cached value, if it is fresh and no fetch holds the cache right now.
+    pub fn peek(&self) -> Option<Arc<T>> {
+        let slot = self.slot.try_lock().ok()?;
+        slot.as_ref().filter(|(fetched, _)| fetched.elapsed() < self.max_age).map(|(_, value)| value.clone())
+    }
+
     /// The cached value, or a fresh one from `fetch`. Concurrent callers wait
     /// for one fetch rather than each making their own.
     pub async fn get_or_fetch<E>(&self, fetch: impl AsyncFnOnce() -> Result<T, E>) -> Result<Arc<T>, E> {

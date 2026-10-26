@@ -69,12 +69,12 @@ pub async fn handler(
     State(state): State<Arc<AppState>>,
     Params(request): Params<Request>,
 ) -> Result<Html<String>, AppError> {
-    let start = request.start.unwrap_or(0);
     let size = request.size.unwrap_or(100).clamp(1, MAX_SIZE);
     // A missing file is an empty list: the job has not run yet.
     let text = tokio::fs::read_to_string(state.config.data_dir.join(FILE)).await.unwrap_or_default();
     let list = parse(&text);
     let total = list.len();
+    let start = request.start.unwrap_or(0).min(total);
     let slice = list.get(start..).unwrap_or_default();
     let slice = slice.get(..size.min(slice.len())).unwrap_or_default();
     let rows = rows(&state, start, slice).await?;

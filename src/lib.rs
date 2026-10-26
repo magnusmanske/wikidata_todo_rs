@@ -1,5 +1,6 @@
 //! The wikidata-todo Toolforge tool: its web service and its background jobs.
 
+pub mod append;
 pub mod cache;
 pub mod config;
 pub mod jobs;

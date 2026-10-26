@@ -97,7 +97,7 @@ pub async fn handler(
     }
     if items.is_empty() && !request.pagepile.trim().is_empty() {
         let id = request.pagepile.trim().parse().map_err(|_| AppError::BadRequest("invalid PagePile ID".into()))?;
-        items = pagepile::items(&state.http, &state.replicas, id).await?;
+        items = pagepile::items(&state.http, &state.replicas, id, MAX_ITEMS).await?;
         items.truncate(MAX_ITEMS);
     }
     let languages = languages(&request.lang, &request.onlylang)?;

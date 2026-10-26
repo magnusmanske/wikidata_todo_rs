@@ -167,7 +167,13 @@ async fn random_candidates(db: &mut Conn, wiki: &str) -> anyhow::Result<Vec<(u32
     Ok(vec![])
 }
 
+/// Forgets a page the app has dealt with, once the wiki shows it no longer
+/// needs an item: anyone can call this, so it must not delete open pages.
 async fn invalidate_page(state: &AppState, wiki: &str, page: &str) -> Answer {
+    let mut wiki_db = state.replicas.conn(&Wiki::from_dbname(wiki)?, WIKI_TABLES).await?;
+    if !open_articles(&mut wiki_db, &[page.to_string()]).await?.is_empty() {
+        return Ok(ok());
+    }
     let mut db = state.tool_db.conn(Database::Duplicity).await?;
     let ids: Vec<u32> =
         db.exec("SELECT id FROM no_wd WHERE wiki=? AND title=?", (wiki, page)).await.map_err(anyhow::Error::from)?;

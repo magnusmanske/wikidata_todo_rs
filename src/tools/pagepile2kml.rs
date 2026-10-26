@@ -50,7 +50,7 @@ pub async fn handler(
         return Ok(render(&Page { title: "PagePile to KML", max_items: MAX_ITEMS })?.into_response());
     }
     let id: u64 = pile.parse().map_err(|_| AppError::BadRequest("The PagePile ID must be a number.".into()))?;
-    let mut items = crate::pagepile::items(&state.http, &state.replicas, id).await?;
+    let mut items = crate::pagepile::items(&state.http, &state.replicas, id, MAX_ITEMS).await?;
     // Pile entries go into queries: only well-formed IDs.
     items.retain(|item| sparql::entity_id(item) == Some(item.as_str()) && item.starts_with('Q'));
     items.truncate(MAX_ITEMS);
