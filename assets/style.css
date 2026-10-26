@@ -176,3 +176,8 @@ ul.tools li { margin: 0.35rem 0; }
 /* Long lists of short entries */
 ul.columns { columns: 16rem; column-gap: 2rem; padding-left: 1.25rem; }
 ul.columns li { break-inside: avoid; margin: 0.15rem 0; }
+
+/* Changes of a number */
+.up { color: #1a7f37; }
+.down { color: var(--danger); }
+@media (prefers-color-scheme: dark) { .up { color: #3fb950; } }
