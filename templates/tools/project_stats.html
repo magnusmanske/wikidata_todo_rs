@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block head %}{% if items.is_none() %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
+{% block content %}
+<nav class="groups">
+  <a href="/project_stats/?mode=langlinks"{% if mode == Mode::Langlinks %} aria-current="page"{% endif %}>Items linked, by project</a>
+  <a href="/project_stats/?mode=labels"{% if mode == Mode::Labels %} aria-current="page"{% endif %}>Item labels, by language</a>
+</nav>
+{% if let Some(items) = items %}
+<p class="lead">Wikidata has {{ items }} items.{% if mode == Mode::Labels %} Label counts are estimates, from the labels of {{ sample }} random item IDs.{% endif %}</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>{% if mode == Mode::Labels %}Language{% else %}Project{% endif %}</th>
+    <th class="num">{% if mode == Mode::Labels %}Items with labels{% else %}Linked items{% endif %}</th>
+    <th class="num">% of items</th><th class="num">% not</th></tr></thead>
+  <tbody>
+{% for row in rows %}  <tr><td>{{ row.key }}</td><td class="num">{{ row.count }}</td><td class="num">{{ row.with }}</td><td class="num">{{ row.without }}</td></tr>
+{% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted">As of {{ at }}; renewed daily.</p>
+{% else %}
+<p class="lead">These numbers take the database a few minutes; they are being counted now. This page reloads itself every 30 seconds.</p>
+{% endif %}
+{% endblock %}
