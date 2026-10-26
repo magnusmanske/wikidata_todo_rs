@@ -83,5 +83,5 @@ pub async fn create(http: &reqwest::Client, wiki: &str, pages: &[String]) -> Res
 
 /// Where a pile can be seen.
 pub fn url(id: u64) -> String {
-    format!("{API}?id={id}&action=get_data&format=html&doit1")
+    format!("{API}?id={id}&action=get_data&format=html&doit=1")
 }

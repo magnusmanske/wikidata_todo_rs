@@ -26,7 +26,7 @@ pub async fn entities(http: &reqwest::Client, ids: &[String], props: &str) -> Re
                     params.push(("props", props));
                 }
                 // formatversion=2 is the default here, and entities stay keyed by ID.
-                mediawiki::api(http, wiki, &params).await
+                mediawiki::api_patiently(http, wiki, &params).await
             }
         })
         .buffer_unordered(CONCURRENCY)
