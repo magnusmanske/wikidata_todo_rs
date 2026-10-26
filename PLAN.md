@@ -7,7 +7,7 @@ database connections, askama templates, one stylesheet.
 
 ## Decisions
 - URLs and parameters stay; pages moved to `/<name>/` with redirects from `.php`, APIs stay where they are.
-- Server-rendered tools share the new look. The Vue apps (Duplicity, Relator, Relator2, WikiFlix, Graveyard shift, Papertrail) keep their interface; their files moved into this repository (`public/`, built into the binary), their APIs are ported. Other static files (pages, scripts, data, and WikiFlix's generated `config.js`) are served from the PHP checkout as they are.
+- Server-rendered tools share the new look. The Vue apps (Duplicity, Relator, Relator2, Graveyard shift, Papertrail) keep their interface; their files moved into this repository (`public/`, built into the binary), their APIs are ported. Other static files (pages, scripts, data) are served from the PHP checkout as they are.
 - Tools that broke (WDQ, `wb_terms`, `revision_compat`, removed columns) are fixed where still useful, else retired.
 - Jobs that feed live tools are ported; dead ones retired; the Wikispecies bot stays PHP.
 - Labels come from the term store (`wbt_*`, own server), never the frozen copies in the main database; the tools' own SPARQL avoids what WDQS's successor (QLever) lacks. Heavy job queries fall back to QLever when WDQS times out.
@@ -16,7 +16,7 @@ database connections, askama templates, one stylesheet.
 ## Endpoint dispositions
 
 Ported: every `public_html/*.php` page and API, `duplicity/`, `relator/`,
-`relator2/`, `wikiflix/` and `wp_no_image/` APIs (see README).
+`relator2/` and `wp_no_image/` APIs (see README). WikiFlix became its own tool: `/wikiflix/…` redirects to https://wikiflix.toolforge.org/.
 
 Retired (`src/web/legacy.rs`):
 
@@ -58,7 +58,7 @@ WDQ from the browser stay broken.
 Rollback: `toolforge webservice stop && toolforge webservice php8.4 start`; PHP jobs from `tjs`.
 
 ## Open
-- WikiFlix and the Wikidata cache read databases whose update scripts have not run for years (`wikiflix_p`, `wikidata_cache_p`, last updated 2022); `stats` shows dumps until 2021.
+- The Wikidata cache reads a database whose update script has not run for years (`wikidata_cache_p`, last updated 2022); `stats` shows dumps until 2021.
 - `project_stats` estimates labels per language from a sample: exact counts take hours.
 - `beacon` on the largest properties (GND, VIAF) is cut off by WDQS's 60 s limit (marked in the output); `subclass_dates` and `best_cats` could use QLever too.
 - geni.com blocks bots, so Relator's Geni import finds nothing.

@@ -54,7 +54,7 @@ check 200 "/merge_candidates_by_shared_identifier.php?action=desc" '"label"'
 check 200 "/pasleim_projectmerge_game_api.php?action=desc" '"label"'
 check 200 "/duplicity/api.php?action=wikis" '"wikis"'
 check 200 "/relator2/api.php?action=random_person" '"data":"Q'
-check 200 "/wikiflix/api.php?action=get_all_sections" '"status":"OK"'
+check 308 "/wikiflix/api.php?action=get_all_sections"
 check 200 "/api.php?action=get_rights" '"error"'
 check 303 "/resolver.php?prop=P214&value=113230702"
 check 303 "/odnb_redirect.php?id=10101010"

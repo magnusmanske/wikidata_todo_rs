@@ -3,12 +3,12 @@
 The web service and background jobs of [wikidata-todo](https://wikidata-todo.toolforge.org/),
 a [Toolforge](https://toolforge.org/) tool by Magnus Manske: a collection of
 tools for finding and doing work on Wikidata, the APIs of its apps (Duplicity,
-Relator, WikiFlix, …), the Distributed Game APIs, and the OAuth editing
+Relator, …), the Distributed Game APIs, and the OAuth editing
 service (Widar) they share.
 
 This replaces the PHP version ([wikidata-todo](https://codeberg.org/magnusmanske/wikidata-todo)).
 The apps with their own (Vue) interface now live here, in `public/`: Duplicity,
-Relator, Relator2, WikiFlix, Graveyard shift and Papertrail. The PHP checkout
+Relator, Relator2, Graveyard shift and Papertrail. The PHP checkout
 stays in use for the other static files in `public_html` (pages, scripts, data;
 served from there by this service), the shared `resources/`, and the
 Wikispecies bot.
@@ -72,7 +72,10 @@ the app), `duplicity/api.php`, `duplicity_game_api.php`,
 `findagrave_recent_celeb_deaths_xml.php`, `gnd.php`, `last_changed_items.php`,
 `merge_candidates_by_shared_identifier.php`, `odnb_redirect.php`,
 `pasleim_projectmerge_game_api.php`, `relator/api.php`, `relator2/api.php`,
-`sourcery_proxy.php`, `suggestor.php`, `wikiflix/api.php`, `wp_no_image/api.php`.
+`sourcery_proxy.php`, `suggestor.php`, `wp_no_image/api.php`.
+
+WikiFlix is a tool of its own now: `/wikiflix/…` redirects to the same path on
+https://wikiflix.toolforge.org/.
 
 Where a parameter took WDQ (the long gone Wikidata Query), it now takes SPARQL,
 or WDQ for the common forms (`src/wdq.rs` translates them).

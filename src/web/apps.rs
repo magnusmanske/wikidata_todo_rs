@@ -1,4 +1,4 @@
-//! The apps with their own interface (Duplicity, Relator, WikiFlix, …): their
+//! The apps with their own interface (Duplicity, Relator, …): their
 //! HTML, JavaScript and CSS live in `public/` and are built into the binary.
 //! Their APIs are tools of their own (`src/tools/`).
 
@@ -68,10 +68,10 @@ mod tests {
         let js = get(dir.path(), "/relator2/app.js").await;
         assert_eq!(js.status.as_u16(), 200);
         assert!(js.headers["content-type"].to_str().unwrap().contains("javascript"));
-        assert_eq!(get(dir.path(), "/wikiflix").await.headers["location"], "/wikiflix/");
+        assert_eq!(get(dir.path(), "/relator2").await.headers["location"], "/relator2/");
         assert_eq!(get(dir.path(), "/papertrail.html").await.status.as_u16(), 200);
         // Not there: on to the PHP checkout, which has nothing either.
-        assert_eq!(get(dir.path(), "/wikiflix/config.js").await.status.as_u16(), 404);
+        assert_eq!(get(dir.path(), "/relator2/no_such_file.js").await.status.as_u16(), 404);
         assert_eq!(get(dir.path(), "/relator2/../Cargo.toml").await.status.as_u16(), 404);
     }
 }

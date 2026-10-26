@@ -54,7 +54,6 @@ const ACTIONS: &[Action] = &[
 const APPS: &[(&str, &str, &str)] = &[
     ("/duplicity/", "Duplicity", "Wikipedia articles without a Wikidata item, and items that may match"),
     ("/relator2/", "Relator", "Family relations of people on Wikidata"),
-    ("/wikiflix/", "WikiFlix", "Films on Wikimedia Commons, by Wikidata"),
     ("/graveyard_shift/", "Graveyard shift", "Graves of people on Wikidata, on a map"),
     ("/tabernacle.html", "TABernacle", "Wikidata items and their statements as a table"),
     ("/sourcery.html", "Sourcery", "References for statements"),

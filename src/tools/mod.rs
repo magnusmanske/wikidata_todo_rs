@@ -65,7 +65,6 @@ mod wdq2graph;
 mod wdq_image_feed;
 mod widar;
 mod wikidata_cache;
-mod wikiflix;
 mod wp_no_image;
 
 use crate::state::AppState;
@@ -236,7 +235,6 @@ fn apis() -> Vec<(&'static str, &'static str, MethodRouter<State>)> {
         ("/relator2/api.php", "relator2", any_method!(relator2::api)),
         ("/sourcery_proxy.php", "sourcery_proxy", any_method!(sourcery_proxy::handler)),
         ("/suggestor.php", "suggestor", any_method!(suggestor::handler)),
-        ("/wikiflix/api.php", "wikiflix", any_method!(wikiflix::api)),
         ("/wp_no_image/api.php", "wp_no_image", any_method!(wp_no_image::api)),
     ]
 }

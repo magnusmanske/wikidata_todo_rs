@@ -15,7 +15,6 @@ pub enum Database {
     Sourcerer,
     UserScripts,
     WikidataCache,
-    WikiFlix,
 }
 
 impl Database {
@@ -27,7 +26,6 @@ impl Database {
             Self::Sourcerer => "sourcerer_p",
             Self::UserScripts => "userscripts_p",
             Self::WikidataCache => "wikidata_cache_p",
-            Self::WikiFlix => "wikiflix_p",
         }
     }
 }

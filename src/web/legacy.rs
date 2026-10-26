@@ -3,8 +3,9 @@
 
 use super::{AppError, moved};
 use axum::Router;
-use axum::response::IntoResponse;
-use axum::routing::get;
+use axum::http::Uri;
+use axum::response::{IntoResponse, Redirect};
+use axum::routing::{any, get};
 
 enum Fate {
     Gone,
@@ -32,13 +33,28 @@ const RETIRED: &[(&str, Fate)] = &[
     ("/quick_statements.php", Fate::MovedTo("https://quickstatements.toolforge.org/")),
 ];
 
+/// Directories that became tools of their own: everything below redirects
+/// to the same path there.
+const MOVED_DIRECTORIES: &[(&str, &str)] = &[("/wikiflix", "https://wikiflix.toolforge.org")];
+
 pub fn routes() -> Router {
-    RETIRED.iter().fold(Router::new(), |router, (path, fate)| {
+    let router = RETIRED.iter().fold(Router::new(), |router, (path, fate)| {
         let handler = match fate {
             Fate::Gone => get(|| async { AppError::Gone.into_response() }),
             Fate::MovedTo(url) => moved(url),
         };
         router.route(path, handler)
+    });
+    MOVED_DIRECTORIES.iter().fold(router, |router, (dir, to)| {
+        let handler = any(move |uri: Uri| async move {
+            let rest = uri.path().strip_prefix(dir).unwrap_or_default().trim_start_matches('/');
+            let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
+            Redirect::permanent(&format!("{to}/{rest}{query}"))
+        });
+        router
+            .route(dir, handler.clone())
+            .route(&format!("{dir}/"), handler.clone())
+            .route(&format!("{dir}/{{*rest}}"), handler)
     })
 }
 
@@ -55,5 +71,12 @@ mod tests {
         let moved = get(dir.path(), "/autolist2.php?manual_list=Q1").await;
         assert_eq!(moved.status.as_u16(), 308);
         assert_eq!(moved.headers["location"], "https://petscan.wmcloud.org/?manual_list=Q1");
+        let location = async |uri| get(dir.path(), uri).await.headers["location"].to_str().unwrap().to_string();
+        assert_eq!(location("/wikiflix").await, "https://wikiflix.toolforge.org/");
+        assert_eq!(location("/wikiflix/").await, "https://wikiflix.toolforge.org/");
+        assert_eq!(
+            location("/wikiflix/api.php?action=get_movie&q=1").await,
+            "https://wikiflix.toolforge.org/api.php?action=get_movie&q=1"
+        );
     }
 }
