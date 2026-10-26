@@ -12,6 +12,7 @@ pub mod state;
 pub mod terms;
 pub mod tool_db;
 pub mod tools;
+pub mod wdq;
 pub mod web;
 pub mod wiki;
 pub mod wikidata;
