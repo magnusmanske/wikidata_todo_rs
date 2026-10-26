@@ -18,6 +18,7 @@ mod country_stats;
 mod creator;
 mod creator_from_wikidata;
 mod description_api;
+mod distributed_game;
 mod dupe_finder;
 mod duplicity;
 mod duplicity_game_api;

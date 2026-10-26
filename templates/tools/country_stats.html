@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Items about the people and places of some countries, as counted day by day from 2014 to 2022.
+Hover over a number for the <abbr title="Wikidata Query, retired">WDQ</abbr> query that counted it.</p>
+<nav class="groups">{% for country in countries.iter() %}<a href="#{{ country.code }}">{{ country.code }}</a>{% endfor %}</nav>
+{% for country in countries.iter() %}
+<h2 id="{{ country.code }}">{{ country.code }}</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Day</th>{% for column in country.columns %}<th class="num">{{ column }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for day in country.days %}<tr><th>{{ day.date }}</th>
+  {%- for cell in day.cells %}<td class="num">
+  {%- if let Some(cell) = cell %}<span{% if !cell.query.is_empty() %} title="{{ cell.query }}"{% endif %}>{{ cell.items }}</span>
+  {%- if let Some(change) = cell.change %}<br><small class="{% if *change > 0 %}up{% else %}down{% endif %}">{% if *change > 0 %}+{% endif %}{{ change }}</small>{% endif %}
+  {%- if let Some(share) = cell.share %}<br><small class="muted">{{ share }}</small>{% endif %}
+  {%- else %}—{% endif %}</td>{% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endfor %}
+{% endblock %}
