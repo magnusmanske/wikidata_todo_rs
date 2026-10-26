@@ -12,8 +12,9 @@ use wikimisc::mysql_async::{Params, Value};
 
 const TABLES: &[&str] = &["wbt_item_terms", "wbt_property_terms", "wbt_term_in_lang", "wbt_text_in_lang", "wbt_text"];
 
-/// The fallback languages most tools here use, after the user's own.
-pub const DEFAULT_LANGUAGES: &[&str] = &["en", "de", "fr", "es", "it", "nl"];
+/// The fallback languages most tools here use, after the user's own. `mul`
+/// holds the labels common to many languages (e.g. most names of people).
+pub const DEFAULT_LANGUAGES: &[&str] = &["en", "mul", "de", "fr", "es", "it", "nl"];
 
 /// Term types, as `wbt_type` numbers them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

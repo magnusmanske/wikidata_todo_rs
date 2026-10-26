@@ -112,7 +112,7 @@ pub async fn handler(
     State(state): State<Arc<AppState>>,
     Params(request): Params<Request>,
 ) -> Result<Response, AppError> {
-    let languages = terms::languages_with(&request.lang, &["en", "de", "es", "it", "fr"]);
+    let languages = terms::languages_with(&request.lang, &["en", "mul", "de", "es", "it", "fr"]);
     let max = request.max.unwrap_or(100).clamp(1, MAX_BATCH);
     let action = ACTIONS.iter().find(|a| a.key == request.action);
     if !request.bot.is_empty() && request.bot != "0" {

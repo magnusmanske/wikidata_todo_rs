@@ -3,7 +3,7 @@
 
 use crate::sparql;
 use crate::state::AppState;
-use crate::terms;
+use crate::terms::{self, DEFAULT_LANGUAGES};
 use crate::web::{AppError, Params, render};
 use askama::Template;
 use axum::body::Body;
@@ -15,8 +15,6 @@ use serde::Deserialize;
 use std::sync::Arc;
 use wikimisc::escape;
 
-/// Label languages; "mul" holds the labels common to many languages.
-const LANGUAGES: &[&str] = &["en", "mul", "de", "fr", "es", "it", "nl"];
 /// Items per query.
 const BATCH: usize = 500;
 const CONCURRENCY: usize = 4;
@@ -99,7 +97,7 @@ async fn placemarks(state: &AppState, items: &[String]) -> anyhow::Result<Vec<Pl
         }
     }
     let ids: Vec<String> = placemarks.iter().map(|p| p.item.clone()).collect();
-    let labels = terms::labels(&state.replicas, &ids, LANGUAGES).await?;
+    let labels = terms::labels(&state.replicas, &ids, DEFAULT_LANGUAGES).await?;
     for p in &mut placemarks {
         p.label = labels.get(&p.item).cloned().unwrap_or_else(|| p.item.clone());
     }

@@ -5,7 +5,7 @@
 use crate::replicas::{display_title, select_in};
 use crate::sparql;
 use crate::state::AppState;
-use crate::terms;
+use crate::terms::{self, DEFAULT_LANGUAGES};
 use crate::web::{AppError, Params, render};
 use crate::wiki::{Wiki, encode_title};
 use crate::wikidata::parse_id;
@@ -15,8 +15,6 @@ use axum::response::Html;
 use serde::Deserialize;
 use std::sync::Arc;
 
-/// Label languages; "mul" holds the labels common to many languages.
-const LANGUAGES: &[&str] = &["en", "mul", "de", "fr", "es", "it", "nl"];
 const MAX_DEPTH: u32 = 10;
 const MAX_FILES: usize = 50_000;
 const MAX_DISTANCE_M: u32 = 10_000;
@@ -109,7 +107,7 @@ async fn results(
     let truncated = pairs.len() > MAX_PAIRS;
     pairs.truncate(MAX_PAIRS);
     let ids: Vec<String> = pairs.iter().map(|(_, item, _)| item.name.clone()).collect();
-    let labels = terms::labels(&state.replicas, &ids, LANGUAGES).await?;
+    let labels = terms::labels(&state.replicas, &ids, DEFAULT_LANGUAGES).await?;
     let pairs = pairs
         .into_iter()
         .map(|(file, item, distance_m)| Pair {

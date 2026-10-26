@@ -7,7 +7,7 @@
 use crate::cache::TimedCache;
 use crate::sparql::{self, literal};
 use crate::state::AppState;
-use crate::terms;
+use crate::terms::{self, DEFAULT_LANGUAGES};
 use crate::web::{AppError, Params, render};
 use crate::wiki::Wiki;
 use crate::wikidata::{self, parse_id};
@@ -20,8 +20,6 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Label languages; "mul" holds the labels common to many languages.
-const LANGUAGES: &[&str] = &["en", "mul", "de", "fr", "es", "it", "nl"];
 /// The item whose "formatter URL" (P3303) statements are the tools' URL patterns.
 const TOOLS_ITEM: &str = "Q43649390";
 const DAY: Duration = Duration::from_secs(24 * 3600);
@@ -77,7 +75,7 @@ pub async fn handler(
             {
                 return Ok(Redirect::to(&target(&state, item, &request.project).await?).into_response());
             }
-            let labels = terms::labels(&state.replicas, &items, LANGUAGES).await?;
+            let labels = terms::labels(&state.replicas, &items, DEFAULT_LANGUAGES).await?;
             let items = items.into_iter().map(|q| (labels.get(&q).cloned().unwrap_or_else(|| q.clone()), q)).collect();
             Some(Found { property, value, items })
         }
