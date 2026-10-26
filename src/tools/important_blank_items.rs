@@ -5,7 +5,7 @@
 use crate::replicas::select_in;
 use crate::state::AppState;
 use crate::terms;
-use crate::web::{AppError, Params, render, thousands};
+use crate::web::{AppError, Paging, Params, render, thousands};
 use crate::wiki::Wiki;
 use askama::Template;
 use axum::extract::State;
@@ -34,34 +34,12 @@ struct Row {
     item_links: Option<u64>,
 }
 
-/// Links to other pages of the list: `(start, "first–last")`.
-struct Nav {
-    size: usize,
-    previous: Option<(usize, String)>,
-    current: String,
-    next: Option<(usize, String)>,
-    random: usize,
-}
-
-impl Nav {
-    fn new(start: usize, size: usize, total: usize) -> Self {
-        let range = |start: usize| format!("{}–{}", start + 1, start + size);
-        Self {
-            size,
-            previous: (start > 0).then(|| start.saturating_sub(size)).map(|s| (s, range(s))),
-            current: range(start),
-            next: (start + size < total).then(|| (start + size, range(start + size))),
-            random: rand::random_range(0..=total.saturating_sub(size)) / size * size,
-        }
-    }
-}
-
 #[derive(Template)]
 #[template(path = "tools/important_blank_items.html")]
 struct Page {
     title: &'static str,
     rows: Vec<Row>,
-    nav: Nav,
+    nav: Paging,
     total: String,
 }
 
@@ -78,7 +56,7 @@ pub async fn handler(
     let slice = list.get(start..).unwrap_or_default();
     let slice = slice.get(..size.min(slice.len())).unwrap_or_default();
     let rows = rows(&state, start, slice).await?;
-    let nav = Nav::new(start, size, total);
+    let nav = Paging::new(start, size, total, "");
     render(&Page { title: "Important blank items", rows, nav, total: thousands(total as u64) })
 }
 
@@ -125,16 +103,6 @@ mod tests {
     #[test]
     fn parses_the_list() {
         assert_eq!(parse("item\tsitelinks\n25216209\t18\n\nbad\n42\t7\n"), [(25216209, 18), (42, 7)]);
-    }
-
-    #[test]
-    fn navigation() {
-        let nav = Nav::new(50, 100, 1000);
-        assert_eq!(nav.previous, Some((0, "1–100".to_string())));
-        assert_eq!(nav.current, "51–150");
-        assert_eq!(nav.next, Some((150, "151–250".to_string())));
-        assert!(nav.random <= 900 && nav.random.is_multiple_of(100));
-        assert_eq!(Nav::new(0, 10, 5).next, None);
     }
 
     #[tokio::test]

@@ -18,8 +18,8 @@ Wikispecies bot.
 Each tool lives at `/<name>/`; its old address, `/<name>.php`, redirects there
 (permanently, keeping the query string and, for POST, the body). Tools that
 other tools call with `format=json` and such (`get_item_names`,
-`pagepile2kml`, `related_properties`, `resolver`, `sparql_rc`, `user_edits`,
-`wikidata_cache`) also answer at their old address.
+`pagepile2kml`, `related_properties`, `resolver`, `sparql_rc`, `user_edits`)
+also answer at their old address.
 
 | Path | What it does |
 |---|---|
@@ -63,7 +63,6 @@ other tools call with `format=json` and such (`get_item_names`,
 | `/wd_edit_stats/` | Edits per month and user to some items |
 | `/wdq2graph/` | Graph (DOT, TGF) of an item tree |
 | `/wdq_image_feed/` | RSS feed of a query's images |
-| `/wikidata_cache/` | Items with all of some properties, from the tool's cache |
 
 APIs, at their old addresses: `api.php` (Widar; also `/widar/` and
 `/widar/index.php`), `canned_queries.php`, `commons2json.php`,

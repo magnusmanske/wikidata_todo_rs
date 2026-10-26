@@ -78,12 +78,15 @@ for (const form of document.querySelectorAll('form.add-item')) {
 {% endmatch %}
 {% else %}
 {% if let Some(error) = error %}<p class="error">{{ error }}</p>{% endif %}
-<p class="lead">You have the item of a person with awards (e.g. <a href="/awarder/?q=Q44461">Q44461</a>), and want to add the awards their articles mention:</p>
+<p class="lead">Awards that Wikipedia mentions, as statements for Wikidata (via QuickStatements).</p>
+<h2>Awards of a person</h2>
+<p>From the items of the awards that a person's articles link to (e.g. <a href="/awarder/?q=Q44461">Q44461</a>).</p>
 <form method="get" action="/awarder/">
   <label>Item of a person <input type="text" name="q" value="{{ q }}" placeholder="Q44461" required></label>
   <button>Find awards</button>
 </form>
-<p class="lead">Or you have an article about an award, with a bullet-point list of years and linked recipients (<a href="https://de.wikipedia.org/w/index.php?title=Euler-Medaille&amp;action=edit&amp;section=1">example</a>):</p>
+<h2>Recipients of an award</h2>
+<p>From the list of recipients in an article about the award: a bullet-point list of years and linked recipients (<a href="https://de.wikipedia.org/w/index.php?title=Euler-Medaille&amp;action=edit&amp;section=1">example</a>).</p>
 <form method="post" action="/awarder/">
   <label>List of recipients, as wikitext <textarea name="wikitext" rows="10" placeholder="* 1999 [[Recipient]]">{{ wikitext }}</textarea></label>
   <div class="row">

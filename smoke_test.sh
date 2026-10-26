@@ -30,7 +30,7 @@ for tool in add_name_labels artwork_images awarder beacon best_cats bioacoustica
   important_blank_items label_no_instance linked_items missing_wp_animal_audio multibeacon new_items pagepile2kml \
   personendaten project_stats property_string_matcher relabel related_properties resolver reverse_tree \
   sourcerer_game sparql_rc stats subclass_dates test_descriptions translate_items_with_property \
-  unused_images_of_people user_edits wd_commons wd_edit_stats wdq2graph wdq_image_feed wikidata_cache; do
+  unused_images_of_people user_edits wd_commons wd_edit_stats wdq2graph wdq_image_feed; do
   check 200 "/$tool/" "<h1>"
 done
 check 308 "/reverse_tree.php?title=Douglas_Adams&doit=1"
@@ -70,6 +70,7 @@ check 404 "/php/common.php"
 # Retired pages.
 check 410 "/sexer.php"
 check 308 "/quick_statements.php"
+check 410 "/wikidata_cache.php"
 
 echo "$pass passed, $fail failed"
 [[ $fail -eq 0 ]]

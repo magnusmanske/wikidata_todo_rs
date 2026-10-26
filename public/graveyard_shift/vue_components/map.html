@@ -15,6 +15,11 @@
 
 var mapcounter = 0 ;
 
+// Labels come from Wikidata, and go into HTML.
+function escapeHtml ( s ) {
+    return (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') ;
+}
+
 Vue.component ( 'graveyard-map' , {
     props : [ 'lat','lon','zoom','people','user_position' ] ,
     data : function () { return {} } ,
@@ -31,15 +36,16 @@ Vue.component ( 'graveyard-map' , {
         generate_map : function () {
             let me = this ;
 
+            // Original files: Commons serves thumbnails in a few standard sizes only.
             let icon_size = 16 ;
             let grave_icon_red = L.icon({
-                iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Round_cross.svg/'+icon_size+'px-Round_cross.svg.png',
+                iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/4/4a/Round_cross.svg',
                 iconSize: [icon_size, icon_size],
-                iconAnchor: [0,0],
+                iconAnchor: [icon_size/2,icon_size/2],
                 popupAnchor: [0,0],
             });
             let grave_icon_green = L.icon({
-                iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/Cross_green_icon.svg/'+icon_size+'px-Cross_green_icon.svg.png',
+                iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/7/75/Cross_green_icon.svg',
                 iconSize: [icon_size, icon_size],
                 iconAnchor: [icon_size/2,icon_size/2],
                 popupAnchor: [0,0],
@@ -49,8 +55,17 @@ Vue.component ( 'graveyard-map' , {
             var style = 'osm-intl';
             var server = 'https://maps.wikimedia.org/';
             
-            // Create a map
-            var map = L.map(me.id).setView([me.lat*1,me.lon*1], me.zoom*1);
+            // Create a map; at the view in the address, if there is one.
+            let view = me.$route.query ;
+            let has_view = view.lat && view.lon && view.zoom ;
+            var map = has_view
+                ? L.map(me.id).setView([view.lat*1,view.lon*1], view.zoom*1)
+                : L.map(me.id).setView([me.lat*1,me.lon*1], me.zoom*1);
+            // Keeps the address up to date, as a permalink of the view.
+            map.on ( 'moveend' , function () {
+                let c = map.getCenter() ;
+                router.replace ( { path:me.$route.path , query:{ lat:c.lat.toFixed(5) , lon:c.lng.toFixed(5) , zoom:''+map.getZoom() } } ) ;
+            } ) ;
 
             // Add a map layer
             L.tileLayer(server + style + '/{z}/{x}/{y}.png', {
@@ -59,7 +74,10 @@ Vue.component ( 'graveyard-map' , {
                 //attribution: 'Wikimedia maps beta | Map data &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap contributors</a>'
             }).addTo(map);
             
-            L.marker([me.user_position.latitude*1, me.user_position.longitude*1]).addTo(map);
+            // Where the user is, if known.
+            if ( isFinite(me.user_position.latitude) && isFinite(me.user_position.longitude) ) {
+                L.marker([me.user_position.latitude*1, me.user_position.longitude*1]).addTo(map);
+            }
 
             let markers = [] ;
             $.each ( me.people , function(q,data) {
@@ -70,11 +88,11 @@ Vue.component ( 'graveyard-map' , {
                 }) ;
                 marker.bindPopup(function(){
                     let html = "<div>" ;
-                    html += "<div><a href='https://www.wikidata.org/wiki/"+q+"' target='_blank' class='wikidata'>"+data.label+"</a></div>";
-                    html += "<div>" + data.born_pretty + " | " + data.died_pretty + "</div>" ;
+                    html += "<div><a href='https://www.wikidata.org/wiki/"+q+"' target='_blank' class='wikidata'>"+escapeHtml(data.label)+"</a></div>";
+                    html += "<div>" + escapeHtml(data.born_pretty) + " | " + escapeHtml(data.died_pretty) + "</div>" ;
                     if ( typeof data.grave_image != 'undefined' ) {
-                        let thumb_url = data.grave_image.replace(/^http:/,'https:').replace("'","&39;")+"?width=120"; ;
-                        html += "<div style='text-align:center;'><img src='"+thumb_url+" alt='loading'/></div>" ;
+                        let thumb_url = data.grave_image.replace(/^http:/,'https:')+"?width=120" ;
+                        html += "<div style='text-align:center;'><img src='"+escapeHtml(thumb_url)+"' alt='loading'/></div>" ;
                     }
                     html += "</div>" ;
                     return html ;

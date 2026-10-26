@@ -5,12 +5,14 @@ mod apps;
 mod error;
 mod legacy;
 mod page;
+mod paging;
 mod params;
 mod static_files;
 mod stream;
 
 pub use error::AppError;
 pub use page::{api_json, is_valid_callback, jsonp, render, thousands};
+pub use paging::Paging;
 pub use params::Params;
 pub use stream::query_body;
 

@@ -1,11 +1,12 @@
 //! `missing_wp_animal_audio.php`: taxa with a sound file on Wikidata
 //! (P51, audio) whose article on a wiki has no sound at all.
 
+use crate::cache::KeyedCache;
 use crate::replicas::{display_title, select_in};
 use crate::sparql;
 use crate::state::AppState;
-use crate::web::{AppError, Params, render};
-use crate::wiki::Wiki;
+use crate::web::{AppError, Paging, Params, render};
+use crate::wiki::{Wiki, encode_component};
 use askama::Template;
 use axum::extract::State;
 use axum::response::Html;
@@ -13,19 +14,28 @@ use percent_encoding::percent_decode_str;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Files with these endings are sounds.
 const AUDIO: &[&str] = &[".flac", ".oga", ".ogg", ".opus", ".wav", ".mp3"];
+
+/// Rows per page, by default and at most.
+const PAGE_SIZE: usize = 100;
+const MAX_PAGE_SIZE: usize = 500;
+/// Lists are made once in a while: they take a query and many lookups.
+static LISTS: KeyedCache<Vec<Row>> = KeyedCache::new(Duration::from_secs(3600), 100);
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct Request {
     wiki: String,
+    start: usize,
+    size: usize,
 }
 
 impl Default for Request {
     fn default() -> Self {
-        Self { wiki: "enwiki".to_string() }
+        Self { wiki: "enwiki".to_string(), start: 0, size: PAGE_SIZE }
     }
 }
 
@@ -34,6 +44,7 @@ struct Animal {
     file: String,
 }
 
+#[derive(Clone)]
 struct Row {
     url: String,
     title: String,
@@ -46,7 +57,9 @@ struct Row {
 struct Page {
     title: &'static str,
     wiki: String,
-    rows: Vec<Row>,
+    /// `(number, row)`
+    rows: Vec<(usize, Row)>,
+    nav: Paging,
 }
 
 pub async fn handler(
@@ -55,10 +68,20 @@ pub async fn handler(
 ) -> Result<Html<String>, AppError> {
     let dbname = request.wiki.trim().to_lowercase();
     let wiki = Wiki::from_dbname(&dbname)?;
-    let animals = animals(&state, &wiki).await?;
+    let list = LISTS.get_or_fetch(wiki.dbname(), async || list(&state, &wiki).await).await?;
+    let size = request.size.clamp(1, MAX_PAGE_SIZE);
+    let start = request.start.min(list.len());
+    let rows = list.iter().cloned().enumerate().skip(start).take(size).map(|(i, row)| (i + 1, row)).collect();
+    let nav = Paging::new(start, size, list.len(), &format!("wiki={}", encode_component(&dbname)));
+    render(&Page { title: "Animal sounds missing on Wikipedia", wiki: dbname, rows, nav })
+}
+
+/// The articles on taxa with a sound on Wikidata, but none on the wiki.
+async fn list(state: &AppState, wiki: &Wiki) -> anyhow::Result<Vec<Row>> {
+    let animals = animals(state, wiki).await?;
     let titles: Vec<String> = animals.keys().cloned().collect();
-    let silent = without_audio(&state, &wiki, &titles).await?;
-    let rows = animals
+    let silent = without_audio(state, wiki, &titles).await?;
+    Ok(animals
         .into_iter()
         .filter(|(title, _)| silent.contains(title))
         .map(|(title, animal)| Row {
@@ -67,8 +90,7 @@ pub async fn handler(
             item: animal.item,
             file: animal.file,
         })
-        .collect();
-    render(&Page { title: "Animal sounds missing on Wikipedia", wiki: dbname, rows })
+        .collect())
 }
 
 /// Taxa with a sound file and an article on the wiki, by article (database title).

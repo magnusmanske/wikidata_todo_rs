@@ -60,15 +60,19 @@
 
 <script>
 // Fills the SPARQL-based links in, for the chosen country; and counts how many items have images.
+// The queries go to QLever: on WDQS, those for large countries time out.
 (() => {
   const select = document.getElementById('country');
-  const petscan = q => 'https://petscan.wmcloud.org/?doit=1&sparql=' + encodeURIComponent(q);
-  const fist = q => 'https://fist.toolforge.org/wdfist/?sparql=' + encodeURIComponent(q);
+  const petscan = q => 'https://petscan.wmcloud.org/?doit=1&sparql_server=qlever_wd&sparql=' + encodeURIComponent(q);
+  const fist = q => 'https://fist.toolforge.org/wdfist/?prefilled=1&no_images_only=1&sparql_server=qlever_wd&sparql='
+    + encodeURIComponent(q);
+  const PREFIXES = 'PREFIX wd: <http://www.wikidata.org/entity/> PREFIX wdt: <http://www.wikidata.org/prop/direct/> ';
   for (const a of document.querySelectorAll('a[data-sparql]')) a.href = petscan(a.dataset.sparql);
   if (!select) return;
   async function count(where) {
     const query = 'SELECT (COUNT(DISTINCT ?item) AS ?n) { ' + where + ' }';
-    const r = await fetch('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(query));
+    const r = await fetch('https://qlever.dev/api/wikidata?query=' + encodeURIComponent(PREFIXES + query),
+      { headers: { Accept: 'application/sparql-results+json' } });
     return Number((await r.json()).results.bindings[0].n.value);
   }
   async function ratio(span, where) {

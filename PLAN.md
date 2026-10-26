@@ -27,6 +27,7 @@ Retired (`src/web/legacy.rs`):
 | `firstnamebasis.php` | 410 | Needs all humans at once |
 | `true_duplicates.php` | 410 | Wikidata prevents duplicate sitelinks |
 | `viaf_game.php` | 410 | Never finished |
+| `wikidata_cache.php` | 410 | Its data stopped being updated in 2022 |
 | `autolist2.php`, `download_query.php` | → PetScan | AutoList became PetScan |
 | `quick_statements.php` | → quickstatements.toolforge.org | Has its own tool |
 
@@ -58,7 +59,7 @@ WDQ from the browser stay broken.
 Rollback: `toolforge webservice stop && toolforge webservice php8.4 start`; PHP jobs from `tjs`.
 
 ## Open
-- The Wikidata cache reads a database whose update script has not run for years (`wikidata_cache_p`, last updated 2022); `stats` shows dumps until 2021.
+- `stats` shows dumps until 2021.
 - `project_stats` estimates labels per language from a sample: exact counts take hours.
 - `beacon` on the largest properties (GND, VIAF) is cut off by WDQS's 60 s limit (marked in the output); `subclass_dates` and `best_cats` could use QLever too.
 - geni.com blocks bots, so Relator's Geni import finds nothing.

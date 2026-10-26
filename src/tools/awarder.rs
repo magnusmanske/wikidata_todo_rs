@@ -22,6 +22,8 @@ use wikimisc::mysql_async::prelude::Queryable;
 
 /// "award"
 const AWARD: &str = "Q618779";
+const POSITION: &str = "Q4164871";
+const DEGREE: &str = "Q189533";
 const HUMAN: &str = "Q5";
 /// "mul" holds the labels common to many languages.
 const LANGUAGES: &[&str] = &["en", "mul", "de", "es", "fr", "it", "ru"];
@@ -167,6 +169,8 @@ async fn awards_of(state: &AppState, person: &str) -> anyhow::Result<Vec<Award>>
         *counts.entry(item).or_default() += 1;
     }
     let ids: Vec<String> = counts.keys().map(|n| format!("Q{n}")).collect();
+    let not_awards = positions_and_degrees(&state.sparql, &ids).await?;
+    let ids: Vec<String> = ids.into_iter().filter(|id| !not_awards.contains(id)).collect();
     let labels = terms::labels(&state.replicas, &ids, LANGUAGES).await?;
     let in_item = item_links(state, person).await?;
     let mut awards: Vec<Award> = ids
@@ -180,6 +184,21 @@ async fn awards_of(state: &AppState, person: &str) -> anyhow::Result<Vec<Award>>
         .collect();
     awards.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.label.cmp(&b.label)));
     Ok(awards)
+}
+
+/// Those of `ids` that are positions ("professor", "Pope") or academic
+/// degrees: Wikidata files them under "award", but nobody receives them as
+/// one. (Too slow to exclude from the list of all awards at once.)
+async fn positions_and_degrees(sparql: &sparql::Sparql, ids: &[String]) -> anyhow::Result<HashSet<String>> {
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let values: Vec<String> = ids.iter().map(|id| format!("wd:{id}")).collect();
+    let query = format!(
+        "SELECT DISTINCT ?q {{ VALUES ?q {{ {} }} VALUES ?not {{ wd:{POSITION} wd:{DEGREE} }} ?q wdt:P31/wdt:P279* ?not }}",
+        values.join(" ")
+    );
+    Ok(sparql.entities(&query, Some("q")).await?.into_iter().collect())
 }
 
 /// The items of the articles that an article links to, as numbers.
@@ -212,8 +231,10 @@ async fn item_links(state: &AppState, item: &str) -> anyhow::Result<HashSet<Stri
     Ok(links.into_iter().collect())
 }
 
+/// Items that are awards. (Not their classes: "subclass of" chains lead from
+/// "award" to occupations such as "biologist", even to buildings and wars.)
 async fn all_awards(sparql: &sparql::Sparql) -> anyhow::Result<HashSet<u64>> {
-    let query = format!("SELECT ?q {{ ?q (wdt:P31|wdt:P279)* wd:{AWARD} }}");
+    let query = format!("SELECT ?q {{ ?q wdt:P31/wdt:P279* wd:{AWARD} }}");
     let mut csv = sparql.csv(&query).await?;
     let mut awards = HashSet::new();
     for record in csv.records() {

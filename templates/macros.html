@@ -1,0 +1,8 @@
+{% macro paging(nav) %}
+<p class="paging">
+{% if let Some((link, range)) = nav.previous %}<a href="{{ link }}">← {{ range }}</a> · {% endif %}
+{{ nav.current }} of {{ nav.total }}
+{% if let Some((link, range)) = nav.next %} · <a href="{{ link }}">{{ range }} →</a>{% endif %}
+{% if let Some(link) = nav.random %} · <a href="{{ link }}">Random</a>{% endif %}
+</p>
+{% endmacro %}

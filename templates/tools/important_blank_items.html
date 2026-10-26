@@ -1,18 +1,11 @@
 {% extends "base.html" %}
-{% macro navigation(nav) %}
-<p>
-{% if let Some((start, range)) = nav.previous %}<a href="?start={{ start }}&amp;size={{ nav.size }}">{{ range }}</a> · {% endif %}
-{{ nav.current }}
-{% if let Some((start, range)) = nav.next %} · <a href="?start={{ start }}&amp;size={{ nav.size }}">{{ range }}</a>{% endif %}
-· <a href="?start={{ nav.random }}&amp;size={{ nav.size }}">Random</a>
-</p>
-{% endmacro %}
+{% import "macros.html" as macros %}
 {% block content %}
 <p class="lead">Items with many sitelinks, but no statements at all. The top {{ total }}, most sitelinks first.</p>
-{% if rows.is_empty() && nav.previous.is_none() %}
+{% if nav.total == 0 %}
 <p class="muted">The list is not available right now; it is being renewed. Please try again later.</p>
 {% else %}
-{% call navigation(nav) %}{% endcall %}
+{% call macros::paging(nav) %}{% endcall %}
 <div class="table-wrap">
 <table>
   <thead><tr><th class="num">#</th><th>Item</th><th class="num">Sitelinks</th></tr></thead>
@@ -26,6 +19,6 @@
   </tbody>
 </table>
 </div>
-{% call navigation(nav) %}{% endcall %}
+{% call macros::paging(nav) %}{% endcall %}
 {% endif %}
 {% endblock %}

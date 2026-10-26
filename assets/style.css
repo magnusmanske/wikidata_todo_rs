@@ -94,7 +94,8 @@ h2 { font-size: 1.25rem; font-weight: 600; margin: 2rem 0 0.75rem; }
 a { color: var(--accent); text-underline-offset: 2px; }
 a:not(:hover) { text-decoration: none; }
 
-p.lead { color: var(--muted); margin-top: -0.5rem; }
+p.lead { color: var(--muted); }
+h1 + p.lead { margin-top: -0.5rem; }
 
 code, pre, textarea.code { font-family: var(--mono); font-size: 0.875rem; }
 pre {
@@ -143,6 +144,9 @@ button {
 }
 button:hover { filter: brightness(1.08); }
 form.inline { display: block; max-width: none; }
+/* A small form in a table cell: input and button side by side. */
+td > form.inline { display: flex; gap: 0.5rem; align-items: center; }
+td > form.inline input { flex: 1; min-width: 6rem; }
 button.link { background: none; color: var(--accent); padding: 0; font-weight: normal; }
 
 /* Results */

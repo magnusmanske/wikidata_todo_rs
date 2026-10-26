@@ -64,7 +64,6 @@ mod wd_edit_stats;
 mod wdq2graph;
 mod wdq_image_feed;
 mod widar;
-mod wikidata_cache;
 mod wp_no_image;
 
 use crate::state::AppState;
@@ -117,14 +116,13 @@ pub const MENU: &[(&str, &str)] = &[
     ("unused_images_of_people", "Unused images of people"),
     ("user_edits", "User edits"),
     ("beacon", "Wikidata BEACON"),
-    ("wikidata_cache", "Wikidata cache"),
     ("wd_commons", "Wikidata Commons search"),
 ];
 
 /// Pages that are APIs as well (other tools call them with `format=json`
 /// and such), so their old address answers directly instead of redirecting.
 const ALSO_AT_OLD_ADDRESS: &[&str] =
-    &["get_item_names", "pagepile2kml", "related_properties", "resolver", "sparql_rc", "user_edits", "wikidata_cache"];
+    &["get_item_names", "pagepile2kml", "related_properties", "resolver", "sparql_rc", "user_edits"];
 
 pub fn routes(state: &State) -> Router<State> {
     let router = Router::new().route("/", get(index::handler)).route("/index.php", get(index::handler));
@@ -198,7 +196,6 @@ fn pages() -> Vec<(&'static str, MethodRouter<State>)> {
         ("wd_edit_stats", any_method!(wd_edit_stats::handler)),
         ("wdq2graph", any_method!(wdq2graph::handler)),
         ("wdq_image_feed", any_method!(wdq_image_feed::handler)),
-        ("wikidata_cache", any_method!(wikidata_cache::handler)),
     ]
 }
 

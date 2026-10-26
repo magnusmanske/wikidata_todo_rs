@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "macros.html" as macros %}
 {% block content %}
 <p class="lead">Taxa with a sound file on Wikidata (audio, P51), whose article on {{ wiki }} has no sound at all.</p>
 <form method="get" action="/missing_wp_animal_audio/" class="inline">
@@ -7,14 +8,15 @@
     <button>Use this wiki</button>
   </div>
 </form>
-<h2>{{ rows.len() }} articles without sound</h2>
+<h2>{{ nav.total }} articles without sound</h2>
+{% call macros::paging(nav) %}{% endcall %}
 <div class="table-wrap">
 <table>
   <thead><tr><th class="num">#</th><th>Article</th><th>Item</th><th>Sound on Wikidata</th></tr></thead>
   <tbody>
-  {% for row in rows %}
+  {% for (number, row) in rows %}
     <tr>
-      <td class="num">{{ loop.index }}</td>
+      <td class="num">{{ number }}</td>
       <td><a href="{{ row.url }}">{{ row.title }}</a></td>
       <td><a href="https://www.wikidata.org/wiki/{{ row.item }}">{{ row.item }}</a></td>
       <td><a href="https://commons.wikimedia.org/wiki/File:{{ row.file|urlencode }}">{{ row.file }}</a></td>
@@ -23,4 +25,5 @@
   </tbody>
 </table>
 </div>
+{% call macros::paging(nav) %}{% endcall %}
 {% endblock %}

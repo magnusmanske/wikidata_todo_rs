@@ -14,7 +14,6 @@ pub enum Database {
     Monitor,
     Sourcerer,
     UserScripts,
-    WikidataCache,
 }
 
 impl Database {
@@ -25,7 +24,6 @@ impl Database {
             Self::Monitor => "monitor_p",
             Self::Sourcerer => "sourcerer_p",
             Self::UserScripts => "userscripts_p",
-            Self::WikidataCache => "wikidata_cache_p",
         }
     }
 }

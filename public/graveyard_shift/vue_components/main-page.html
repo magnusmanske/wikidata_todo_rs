@@ -37,13 +37,13 @@
                 <tbody>
                     <tr v-for="c in cemeteries">
                         <td>
-                            <a href='#' @click.prevent='cemetery_q=c.q;set_cemetary()'>
+                            <a :href='"#/"+c.q' @click.prevent='choose(c.q)'>
                                 <wd-link :item='c.q' as_text='1'></wd-link>
                             </a>
                             <small>[<wd-link :item='c.q' :label='c.q'></wd-link>]</small>
                         </td>
                         <td>{{c.distance}} km</td>
-                        <td>{{c.instance_of}}</td>
+                        <td>{{c.types.join(", ")}}</td>
                     </tr>
                 </tbody>
             </table>
@@ -54,7 +54,7 @@
         <form>
             <span tt='cemetery'></span>:
             <input type='text' v-model='cemetery_q' placeholder='Qxxx' />
-            <input v-if='cemetery_q.match(/^[Qq]\d+$/)' type='submit' @click.prevent='set_cemetary' class="btn btn-outline-primary" value='Use cemetery' />
+            <input v-if='cemetery_q.match(/^[Qq]\d+$/)' type='submit' @click.prevent='choose(cemetery_q)' class="btn btn-outline-primary" value='Use cemetery' />
         </form>
     </div>
 
@@ -113,6 +113,12 @@ let MainPage = Vue.extend ( {
         image_cache:{} , people_list:[] } } ,
     created : function () {
         let me = this ;
+        // The start page's permalink has the position it was made for.
+        let q = me.$route.query ;
+        if ( typeof me.initial_cemetery_q == 'undefined' && q.lat && q.lon ) {
+            me.take_coordinates ( { coords: { latitude:q.lat*1 , longitude:q.lon*1 } } ) ;
+            return ;
+        }
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition(me.positionHasChanged, me.positionIsLost, {maximumAge:0,enableHighAccuracy:true}          );
             navigator.geolocation.getCurrentPosition(
@@ -147,9 +153,16 @@ let MainPage = Vue.extend ( {
             }
 
 
+            // A permalink for the cemeteries near this position.
+            let lat = (me.user_position.latitude*1).toFixed(4) ;
+            let lon = (me.user_position.longitude*1).toFixed(4) ;
+            if ( me.$route.query.lat != lat || me.$route.query.lon != lon ) {
+                router.replace ( { path:'/' , query:{ lat:lat , lon:lon } } ) ;
+            }
+
             let location_point = '"Point('+me.user_position.longitude+' '+me.user_position.latitude+')"^^geo:wktLiteral' ;
             let radius_km = 10 ;
-            let max_results = 10 ;
+            let max_results = 50 ; // Rows: a cemetery can come once per type
             let sparql = 'SELECT DISTINCT ?cemetery ?cemeteryLabel ?dist ?instance_ofLabel WHERE { ?cemetery wdt:P31/wdt:P279* wd:Q39614 . ' +
                             'SERVICE wikibase:around { ?cemetery wdt:P625 ?coordinate_location. bd:serviceParam wikibase:center '+
                             location_point+
@@ -159,20 +172,34 @@ let MainPage = Vue.extend ( {
                             'OPTIONAL { ?cemetery wdt:P31 ?instance_of. } } ORDER BY ?dist LIMIT '+
                             max_results;
             wd.loadSPARQL(sparql,function(d){
+                // One row per cemetery, with all its types.
+                let by_q = {} ;
                 $.each ( d.results.bindings , function ( k , v ) {
-                    me.cemeteries.push({
-                        q:wd.itemFromBinding(v.cemetery),
-                        label:v.cemeteryLabel.value||'',
-                        distance: v.dist.value * 1,
-                        instance_of:v.instance_ofLabel.value,
-                    });
+                    let q = wd.itemFromBinding(v.cemetery) ;
+                    let type = (v.instance_ofLabel||{}).value||'' ;
+                    if ( typeof by_q[q] == 'undefined' ) {
+                        by_q[q] = { q:q , label:v.cemeteryLabel.value||'' , distance:v.dist.value*1 , types:[] } ;
+                        me.cemeteries.push ( by_q[q] ) ;
+                    }
+                    if ( type != '' && by_q[q].types.indexOf(type) == -1 ) by_q[q].types.push ( type ) ;
                 } ) ;
+                me.cemeteries = me.cemeteries.slice ( 0 , 10 ) ;
                 me.step = 1 ;
             },function(x,y,z){
                 me.warning = "SPARQL to find closest cemeteries has failed!";
                 console.log(x,y,z)
             })
         },
+        // Shows a cemetery, under its own address.
+        choose: function ( q ) {
+            q = (''+q).toUpperCase() ;
+            if ( this.$route.path == '/'+q ) {
+                this.cemetery_q = q ;
+                this.set_cemetary() ;
+            } else {
+                router.push ( '/'+q ) ;
+            }
+        } ,
         set_cemetary: function() {
             let me = this ;
             if ( typeof me.cemetery_q == 'undefined' || me.cemetery_q == '' ) {

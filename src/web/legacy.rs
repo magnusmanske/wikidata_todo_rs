@@ -31,6 +31,10 @@ const RETIRED: &[(&str, Fate)] = &[
     ("/autolist2.php", Fate::MovedTo(PETSCAN)),
     ("/download_query.php", Fate::MovedTo(PETSCAN)),
     ("/quick_statements.php", Fate::MovedTo("https://quickstatements.toolforge.org/")),
+    // Its data stopped being updated in 2022.
+    ("/wikidata_cache.php", Fate::Gone),
+    ("/wikidata_cache/", Fate::Gone),
+    ("/wikidata_cache", Fate::Gone),
 ];
 
 /// Directories that became tools of their own: everything below redirects
