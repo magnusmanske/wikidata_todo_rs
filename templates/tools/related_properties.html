@@ -13,7 +13,7 @@ Add <code>botmode=1</code> (and <code>callback</code>) for JSON(P).</p>
 {% endif %}
 {% if let Some(results) = results %}
 <h2>{{ results.rows.len() }} properties</h2>
-<p class="muted">Used by {{ results.items }} items{% if results.sampled %}, a random sample of the query's results{% endif %}; in statements, qualifiers or references.</p>
+<p class="muted">Used by {{ results.items }} items{% if results.sampled %}, the first of the query's results{% endif %}; in statements, qualifiers or references.</p>
 <div class="table-wrap">
 <table>
   <thead><tr><th>Property</th><th class="num">Items</th><th class="num">% of all</th><th>Those items</th></tr></thead>

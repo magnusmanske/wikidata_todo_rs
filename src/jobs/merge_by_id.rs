@@ -25,7 +25,7 @@ pub async fn update(state: &AppState, only: &[String], writes: Writes) -> Result
         true => {
             // External IDs with a "distinct values" constraint.
             let query = "SELECT ?p { ?p wikibase:propertyType wikibase:ExternalId ; wdt:P2302 wd:Q21502410 }";
-            state.sparql.entities(query, None).await?
+            state.sparql.entities(query, None, usize::MAX).await?.ids
         }
         false => only.to_vec(),
     };

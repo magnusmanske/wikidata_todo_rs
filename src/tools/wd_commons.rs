@@ -4,7 +4,6 @@
 
 use crate::mediawiki;
 use crate::replicas::{display_title, select_in};
-use crate::sparql;
 use crate::state::AppState;
 use crate::terms;
 use crate::wdq;
@@ -96,9 +95,8 @@ async fn search(state: &AppState, query: &str) -> Result<Results, AppError> {
 }
 
 async fn from_query(state: &AppState, query: &str) -> Result<Results, AppError> {
-    let json = wdq::run(&state.sparql, query).await?;
-    let mut items: Vec<String> = sparql::entities_in(&json, None).into_iter().filter(|i| i.starts_with('Q')).collect();
-    items.truncate(MAX_ITEMS);
+    let found = wdq::entities(&state.sparql, query, MAX_ITEMS).await?;
+    let items: Vec<String> = found.ids.into_iter().filter(|i| i.starts_with('Q')).collect();
     let labels = terms::labels(&state.replicas, &items, terms::DEFAULT_LANGUAGES).await?;
     let found = items
         .into_iter()

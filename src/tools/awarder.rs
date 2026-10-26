@@ -198,7 +198,7 @@ async fn positions_and_degrees(sparql: &sparql::Sparql, ids: &[String]) -> anyho
         "SELECT DISTINCT ?q {{ VALUES ?q {{ {} }} VALUES ?not {{ wd:{POSITION} wd:{DEGREE} }} ?q wdt:P31/wdt:P279* ?not }}",
         values.join(" ")
     );
-    Ok(sparql.entities(&query, Some("q")).await?.into_iter().collect())
+    Ok(sparql.entities(&query, Some("q"), ids.len()).await?.ids.into_iter().collect())
 }
 
 /// The items of the articles that an article links to, as numbers.

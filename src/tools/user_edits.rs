@@ -232,8 +232,8 @@ pub async fn handler(
     let pages = match page.request.sparql.trim() {
         "" => None,
         sparql => {
-            let items = match state.sparql.entities(sparql, None).await {
-                Ok(items) => items,
+            let items = match state.sparql.entities(sparql, None, MAX_ITEMS).await {
+                Ok(found) => found.ids,
                 Err(e) => return error(page, format!("The SPARQL query failed: {e:#}")),
             };
             let items: Vec<String> = items.into_iter().filter(|id| id.starts_with('Q')).take(MAX_ITEMS).collect();

@@ -359,7 +359,7 @@ async fn search(state: &AppState, criteria: &Criteria) -> anyhow::Result<Option<
 /// The items of `source` that match `patterns`.
 async fn filtered(sparql: &Sparql, source: &str, patterns: &[String]) -> anyhow::Result<Vec<String>> {
     let query = format!("SELECT DISTINCT ?item {{ {source} {} }} LIMIT {MAX_RESULTS}", patterns.join(" "));
-    sparql.entities(&query, Some("item")).await
+    Ok(sparql.entities(&query, Some("item"), MAX_RESULTS).await?.ids)
 }
 
 /// Humans matching the text, citizenship and gender, by Wikidata's search.

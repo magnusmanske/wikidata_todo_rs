@@ -71,13 +71,12 @@ pub async fn handler(
     // Empty: from the beginning, until now.
     let from = parse("Start date", &page.request.from)?;
     let to = parse("End date", &page.request.to)?.unwrap_or_else(Timestamp::now);
-    let mut items = state
+    let found = state
         .sparql
-        .entities(&page.request.sparql, None)
+        .entities(&page.request.sparql, None, MAX_ITEMS)
         .await
         .map_err(|e| AppError::BadRequest(format!("The SPARQL query failed: {e:#}")))?;
-    let capped = items.len() > MAX_ITEMS;
-    items.truncate(MAX_ITEMS);
+    let (items, capped) = (found.ids, found.total > MAX_ITEMS);
     page.stats = Some(stats(&state, &items, from.as_ref(), &to, capped).await?);
     render(&page)
 }

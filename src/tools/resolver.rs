@@ -148,9 +148,12 @@ async fn english_labels(sparql: &sparql::Sparql) -> anyhow::Result<Vec<(String, 
         .collect())
 }
 
+/// Items with the same value: more would not be shown anyway.
+const MAX_MATCHES: usize = 1000;
+
 /// Items with the value as is, in lower or upper case.
 async fn items_with_value(state: &AppState, property: &str, value: &str) -> anyhow::Result<Vec<String>> {
-    state.sparql.entities(&value_query(property, value), Some("q")).await
+    Ok(state.sparql.entities(&value_query(property, value), Some("q"), MAX_MATCHES).await?.ids)
 }
 
 fn value_query(property: &str, value: &str) -> String {

@@ -5,7 +5,7 @@
 //! joined with `and`. Several values in one clause (`claim[31:5,279]`) mean
 //! any of them.
 
-use crate::sparql::Sparql;
+use crate::sparql::{Entities, Sparql};
 use crate::web::AppError;
 use crate::wiki::Wiki;
 use crate::wikidata::parse_id;
@@ -32,6 +32,16 @@ pub fn sparql_or_wdq(query: &str) -> Result<String, WdqError> {
 pub async fn run(sparql: &Sparql, query: &str) -> Result<Value, AppError> {
     let query = sparql_or_wdq(query)?;
     sparql.json(&query).await.map_err(|e| {
+        tracing::info!("user query failed: {e:#}");
+        AppError::BadRequest("The query failed. Please check it on https://query.wikidata.org/".to_string())
+    })
+}
+
+/// The first `limit` entities of a user's query, SPARQL or WDQ, read row by
+/// row; with the number of rows that had one.
+pub async fn entities(sparql: &Sparql, query: &str, limit: usize) -> Result<Entities, AppError> {
+    let query = sparql_or_wdq(query)?;
+    sparql.entities(&query, None, limit).await.map_err(|e| {
         tracing::info!("user query failed: {e:#}");
         AppError::BadRequest("The query failed. Please check it on https://query.wikidata.org/".to_string())
     })

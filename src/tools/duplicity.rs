@@ -12,7 +12,7 @@ use crate::wiki::Wiki;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Json, Response};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -23,6 +23,8 @@ use wikimisc::mysql_async::{Conn, Params as SqlParams, Value as SqlValue};
 /// Random candidates checked at once, and how many such rounds at most.
 const RANDOM_BATCH: usize = 20;
 const RANDOM_ROUNDS: usize = 5;
+/// Titles per database lookup.
+const TITLE_CHUNK: usize = 5000;
 /// What the app may read from Wikidata through [`wikidata_api_proxy`].
 const PROXY_ACTIONS: &[&str] = &["query", "wbgetentities"];
 /// Short, so that bursts of requests cannot pile up here.
@@ -78,7 +80,9 @@ pub async fn api(
         "random_nowd_page" => random_page(&state, wiki).await,
         "invalidate_page" => invalidate_page(&state, wiki, get("page")).await,
         "wikis" => wikis(&state).await,
-        "articles" => articles(&state, wiki, get("category"), get("exclude_category")).await,
+        "articles" => {
+            return articles(&state, wiki, get("category"), get("exclude_category")).await.unwrap_or_else(failure);
+        }
         "stats" => stats(&state, wiki).await,
         "categories" => categories(&state, wiki, get("min_pages").trim().parse().unwrap_or(10)).await,
         "wikidata_api_proxy" => {
@@ -102,10 +106,15 @@ pub async fn api(
     };
     match result {
         Ok(out) => Json(Value::Object(out)).into_response(),
-        Err(AppError::BadRequest(message)) => {
-            (StatusCode::BAD_REQUEST, Json(json!({ "status": message }))).into_response()
-        }
-        Err(e) => {
+        Err(e) => failure(e),
+    }
+}
+
+/// An error as the app expects it: JSON with a `status`.
+fn failure(e: AppError) -> Response {
+    match e {
+        AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, Json(json!({ "status": message }))).into_response(),
+        e => {
             tracing::warn!("duplicity API: {e:#}");
             let message = "The database did not answer as expected; please try again later.";
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "status": message }))).into_response()
@@ -132,7 +141,7 @@ async fn random_page(state: &AppState, wiki: &str) -> Answer {
         if candidates.is_empty() {
             break;
         }
-        let titles: Vec<String> = candidates.iter().map(|(_, title)| title.clone()).collect();
+        let titles: Vec<&str> = candidates.iter().map(|(_, title)| title.as_str()).collect();
         let open = open_articles(&mut wiki_db, &titles).await?;
         let (live, stale): (Vec<_>, Vec<_>) = candidates.into_iter().partition(|(_, title)| open.contains(title));
         let stale: Vec<u32> = stale.into_iter().map(|(id, _)| id).collect();
@@ -171,7 +180,7 @@ async fn random_candidates(db: &mut Conn, wiki: &str) -> anyhow::Result<Vec<(u32
 /// needs an item: anyone can call this, so it must not delete open pages.
 async fn invalidate_page(state: &AppState, wiki: &str, page: &str) -> Answer {
     let mut wiki_db = state.replicas.conn(&Wiki::from_dbname(wiki)?, WIKI_TABLES).await?;
-    if !open_articles(&mut wiki_db, &[page.to_string()]).await?.is_empty() {
+    if !open_articles(&mut wiki_db, &[page]).await?.is_empty() {
         return Ok(ok());
     }
     let mut db = state.tool_db.conn(Database::Duplicity).await?;
@@ -216,34 +225,56 @@ async fn wikis(state: &AppState) -> Answer {
 
 /// The articles that still lack an item, oldest first; optionally only
 /// those in a category, or not in another.
-async fn articles(state: &AppState, wiki: &str, category: &str, exclude: &str) -> Answer {
+#[derive(Serialize)]
+struct Articles<'a> {
+    status: &'static str,
+    articles: Vec<Article<'a>>,
+}
+
+#[derive(Serialize)]
+struct Article<'a> {
+    title: &'a str,
+    creation_date: &'a str,
+}
+
+/// The wiki's articles without an item, oldest first; optionally in a
+/// category, or not in one. Lean on memory: for some wikis, these are
+/// over half a million.
+async fn articles(state: &AppState, wiki: &str, category: &str, exclude: &str) -> Result<Response, AppError> {
     let mut db = state.tool_db.conn(Database::Duplicity).await?;
     let rows: Vec<(Vec<u8>, Vec<u8>)> = db
         .exec("SELECT title, creation_date FROM no_wd WHERE wiki=? ORDER BY creation_date", (wiki,))
         .await
         .map_err(anyhow::Error::from)?;
     drop(db);
-    let mut articles: Vec<(String, String)> = rows.into_iter().map(|(t, d)| (text(t), text(d))).collect();
-    if !articles.is_empty() {
+    // In place: the bytes become the strings.
+    let rows: Vec<(String, String)> = rows.into_iter().map(|(t, d)| (text(t), text(d))).collect();
+    let mut keep = None;
+    if !rows.is_empty() {
         let mut wiki_db = state.replicas.conn(&Wiki::from_dbname(wiki)?, WIKI_TABLES).await?;
-        let titles: Vec<String> = articles.iter().map(|(title, _)| title.clone()).collect();
-        let mut keep = open_articles(&mut wiki_db, &titles).await?;
-        if !category.trim().is_empty() && !keep.is_empty() {
-            let open: Vec<String> = keep.iter().cloned().collect();
-            keep = in_category(&mut wiki_db, &open, category).await?;
+        let titles: Vec<&str> = rows.iter().map(|(title, _)| title.as_str()).collect();
+        let mut open = open_articles(&mut wiki_db, &titles).await?;
+        drop(titles);
+        if !category.trim().is_empty() && !open.is_empty() {
+            let titles: Vec<&str> = open.iter().map(String::as_str).collect();
+            let in_it = in_category(&mut wiki_db, &titles, category).await?;
+            drop(titles);
+            open.retain(|title| in_it.contains(title));
         }
-        if !exclude.trim().is_empty() && !keep.is_empty() {
-            let open: Vec<String> = keep.iter().cloned().collect();
-            let excluded = in_category(&mut wiki_db, &open, exclude).await?;
-            keep.retain(|title| !excluded.contains(title));
+        if !exclude.trim().is_empty() && !open.is_empty() {
+            let titles: Vec<&str> = open.iter().map(String::as_str).collect();
+            let excluded = in_category(&mut wiki_db, &titles, exclude).await?;
+            drop(titles);
+            open.retain(|title| !excluded.contains(title));
         }
-        articles.retain(|(title, _)| keep.contains(title));
+        keep = Some(open);
     }
-    let articles: Vec<Value> =
-        articles.into_iter().map(|(title, date)| json!({"title": title, "creation_date": date})).collect();
-    let mut out = ok();
-    out.insert("articles".to_string(), articles.into());
-    Ok(out)
+    let articles = rows
+        .iter()
+        .filter(|(title, _)| keep.as_ref().is_none_or(|keep| keep.contains(title)))
+        .map(|(title, date)| Article { title, creation_date: date })
+        .collect();
+    Ok(Json(Articles { status: "OK", articles }).into_response())
 }
 
 /// How many articles lacked an item, by day (`YYYYMMDD`).
@@ -289,7 +320,7 @@ async fn categories(state: &AppState, wiki: &str, min_pages: u64) -> Answer {
 
 /// Those of `titles` (with spaces) that are live articles without an item:
 /// `no_wd` is only as fresh as the bot's last run.
-async fn open_articles(wiki_db: &mut Conn, titles: &[String]) -> anyhow::Result<HashSet<String>> {
+async fn open_articles(wiki_db: &mut Conn, titles: &[&str]) -> anyhow::Result<HashSet<String>> {
     let sql = "SELECT DISTINCT page_title FROM page WHERE page_namespace=0 AND page_is_redirect=0
         AND NOT EXISTS (SELECT * FROM page_props WHERE pp_page=page_id AND pp_propname='wikibase_item')
         AND page_title IN";
@@ -297,7 +328,7 @@ async fn open_articles(wiki_db: &mut Conn, titles: &[String]) -> anyhow::Result<
 }
 
 /// Those of `titles` (with spaces) that are articles in `category`.
-async fn in_category(wiki_db: &mut Conn, titles: &[String], category: &str) -> anyhow::Result<HashSet<String>> {
+async fn in_category(wiki_db: &mut Conn, titles: &[&str], category: &str) -> anyhow::Result<HashSet<String>> {
     let category = category.trim().replace(' ', "_");
     let Some(target) = linktarget_ids(wiki_db, 14, &[category.as_str()]).await?.first().copied() else {
         return Ok(HashSet::new());
@@ -312,11 +343,16 @@ async fn matching(
     wiki_db: &mut Conn,
     sql: &str,
     params: &[SqlValue],
-    titles: &[String],
+    titles: &[&str],
 ) -> anyhow::Result<HashSet<String>> {
-    let db_titles: Vec<String> = titles.iter().map(|t| t.replace(' ', "_")).collect();
-    let rows: Vec<Vec<u8>> = select_in(wiki_db, sql, "", params, &db_titles).await?;
-    Ok(rows.into_iter().map(|t| text(t).replace('_', " ")).collect())
+    let mut found = HashSet::new();
+    // Chunk by chunk, so that only one chunk is copied at a time.
+    for chunk in titles.chunks(TITLE_CHUNK) {
+        let db_titles: Vec<String> = chunk.iter().map(|t| t.replace(' ', "_")).collect();
+        let rows: Vec<Vec<u8>> = select_in(wiki_db, sql, "", params, &db_titles).await?;
+        found.extend(rows.into_iter().map(|t| text(t).replace('_', " ")));
+    }
+    Ok(found)
 }
 
 fn text(bytes: Vec<u8>) -> String {

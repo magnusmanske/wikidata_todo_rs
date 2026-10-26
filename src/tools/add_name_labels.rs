@@ -84,9 +84,8 @@ pub async fn handler(
     if !is_language_code(&page.to) {
         return Err(AppError::BadRequest("invalid target language".into()));
     }
-    let mut items = state.sparql.entities(&page.sparql, None).await?;
+    let mut items = state.sparql.entities(&page.sparql, None, MAX_ITEMS).await?.ids;
     items.retain(|q| q.starts_with('Q'));
-    items.truncate(MAX_ITEMS);
     let mut wanted: Vec<&str> = from.clone();
     wanted.extend([page.to.as_str(), MUL]);
     let labels = terms::terms(&state.replicas, &items, &[TermType::Label], &wanted).await?;

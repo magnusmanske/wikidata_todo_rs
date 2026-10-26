@@ -2,7 +2,6 @@
 //! or WDQ as of old) use, by how many of them do. With `botmode`, as JSON(P).
 
 use crate::replicas::select_in;
-use crate::sparql;
 use crate::state::AppState;
 use crate::terms;
 use crate::wdq;
@@ -11,12 +10,11 @@ use crate::wiki::{Wiki, encode_component};
 use askama::Template;
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
-use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Larger results are sampled.
+/// Of larger results, only the first are looked at.
 const MAX_ITEMS: usize = 50_000;
 const NS_PROPERTY: i64 = 120;
 
@@ -70,15 +68,9 @@ pub async fn handler(
             None => render(&page)?.into_response(),
         });
     }
-    let json = wdq::run(&state.sparql, q).await?;
-    let var = json["head"]["vars"][0].as_str().unwrap_or("item").to_string();
-    let mut items: Vec<String> =
-        sparql::entities_in(&json, Some(&var)).into_iter().filter(|id| id.starts_with('Q')).collect();
-    let sampled = items.len() > MAX_ITEMS;
-    if sampled {
-        items.shuffle(&mut rand::rng());
-        items.truncate(MAX_ITEMS);
-    }
+    let found = wdq::entities(&state.sparql, q, MAX_ITEMS).await?;
+    let (var, sampled) = (found.var, found.total > MAX_ITEMS);
+    let items: Vec<String> = found.ids.into_iter().filter(|id| id.starts_with('Q')).collect();
     let counts = property_counts(&state, &items).await?;
     if request.botmode.is_some() {
         let usages: Vec<Usage> =

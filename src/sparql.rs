@@ -15,12 +15,18 @@ use wikimisc::sparql_endpoint::SparqlEndpoint;
 
 /// WDQS stops a query after 60 seconds; this leaves time for the answer.
 const TIMEOUT: Duration = Duration::from_secs(90);
-/// Results larger than this are refused rather than parsed into memory.
-const MAX_JSON_BYTES: usize = 512 * 1024 * 1024;
+/// JSON results larger than this are refused: parsed, they take several
+/// times their size in memory, and the service has 512 MiB.
+const MAX_JSON_BYTES: usize = 32 * 1024 * 1024;
+/// CSV results go to a temporary file and are read row by row.
+const MAX_CSV_BYTES: usize = 2 * 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct Sparql {
+    /// For JSON results, which are parsed in memory.
     client: SparqlClient,
+    /// For CSV results, which are buffered on disk.
+    bulk: SparqlClient,
     /// For heavy queries of the jobs, which WDQS cannot finish in time.
     qlever: SparqlClient,
 }
@@ -30,11 +36,13 @@ impl Sparql {
         // The shared client's timeout is too short for slow queries.
         let http =
             reqwest::Client::builder().user_agent(crate::state::USER_AGENT).timeout(TIMEOUT).build().unwrap_or(http);
-        let client = SparqlClient::with_client(SparqlEndpoint::wdqs(), http.clone())
-            .with_retries(2)
-            .with_max_response_bytes(MAX_JSON_BYTES);
-        let qlever = SparqlClient::with_client(SparqlEndpoint::qlever_wikidata(), http).with_retries(1);
-        Ok(Self { client, qlever })
+        let wdqs = SparqlClient::with_client(SparqlEndpoint::wdqs(), http.clone()).with_retries(2);
+        let client = wdqs.clone().with_max_response_bytes(MAX_JSON_BYTES);
+        let bulk = wdqs.with_max_response_bytes(MAX_CSV_BYTES);
+        let qlever = SparqlClient::with_client(SparqlEndpoint::qlever_wikidata(), http)
+            .with_retries(1)
+            .with_max_response_bytes(MAX_CSV_BYTES);
+        Ok(Self { client, bulk, qlever })
     }
 
     /// The query's result, as WDQS's JSON.
@@ -44,13 +52,13 @@ impl Sparql {
 
     /// The result as CSV, buffered in a temporary file: for large results.
     pub async fn csv(&self, query: &str) -> Result<csv::Reader<File>> {
-        self.client.query_csv(&tagged(query)).await.context("SPARQL query failed")
+        self.bulk.query_csv(&tagged(query)).await.context("SPARQL query failed")
     }
 
     /// As [`Self::csv`], but if WDQS fails (mostly: times out), from QLever,
     /// whose data may be a little older. For jobs; the query must suit both.
     pub async fn heavy_csv(&self, query: &str) -> Result<csv::Reader<File>> {
-        match self.client.query_csv(&tagged(query)).await {
+        match self.bulk.query_csv(&tagged(query)).await {
             Ok(reader) => Ok(reader),
             Err(e) => {
                 tracing::info!("WDQS failed ({e}), trying QLever");
@@ -59,28 +67,46 @@ impl Sparql {
         }
     }
 
-    /// The entity IDs (`Q42`, `P31`, `L1`, …) in variable `var` of the
-    /// result, or in its first variable; each once, in result order.
-    pub async fn entities(&self, query: &str, var: Option<&str>) -> Result<Vec<String>> {
-        let json = self.json(query).await?;
-        Ok(entities_in(&json, var))
+    /// The first `limit` entity IDs (`Q42`, `P31`, `L1`, …) in variable
+    /// `var` of the result, or in its first variable; each once, in result
+    /// order. Read row by row, so that a huge result costs no memory.
+    pub async fn entities(&self, query: &str, var: Option<&str>, limit: usize) -> Result<Entities> {
+        entities_from_csv(self.csv(query).await?, var, limit)
     }
+}
+
+/// See [`Sparql::entities`].
+fn entities_from_csv<R: std::io::Read>(mut csv: csv::Reader<R>, var: Option<&str>, limit: usize) -> Result<Entities> {
+    let headers = csv.headers()?.clone();
+    let column = match var {
+        Some(var) => headers.iter().position(|h| h == var).context("no such variable in the result")?,
+        None => 0,
+    };
+    let mut found = Entities { var: headers.get(column).unwrap_or_default().to_string(), ..Default::default() };
+    let mut seen = HashSet::new();
+    for record in csv.records() {
+        let Some(id) = record?.get(column).and_then(entity_id).map(str::to_string) else { continue };
+        found.total += 1;
+        if found.ids.len() < limit && seen.insert(id.clone()) {
+            found.ids.push(id);
+        }
+    }
+    Ok(found)
+}
+
+/// See [`Sparql::entities`].
+#[derive(Debug, Default)]
+pub struct Entities {
+    /// The variable they are from.
+    pub var: String,
+    pub ids: Vec<String>,
+    /// Rows with an entity, including those beyond the limit.
+    pub total: usize,
 }
 
 /// Lets the query service see where queries come from.
 fn tagged(query: &str) -> String {
     format!("{query}\n#TOOL: wikidata-todo")
-}
-
-/// See [`Sparql::entities`].
-pub fn entities_in(json: &Value, var: Option<&str>) -> Vec<String> {
-    let var = var.or_else(|| json["head"]["vars"][0].as_str()).unwrap_or_default();
-    let mut seen = HashSet::new();
-    bindings(json)
-        .filter_map(|row| row[var]["value"].as_str().and_then(entity_id))
-        .filter(|id| seen.insert(id.to_string()))
-        .map(str::to_string)
-        .collect()
 }
 
 /// The result rows.
@@ -133,7 +159,6 @@ pub fn literal(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn entity_ids() {
@@ -146,17 +171,14 @@ mod tests {
     }
 
     #[test]
-    fn entities_in_results() {
-        let json = json!({
-            "head": {"vars": ["q", "x"]},
-            "results": {"bindings": [
-                {"q": {"type": "uri", "value": "http://www.wikidata.org/entity/Q1"}},
-                {"q": {"type": "uri", "value": "http://www.wikidata.org/entity/Q2"}, "x": {"value": "http://www.wikidata.org/entity/Q9"}},
-                {"q": {"type": "uri", "value": "http://www.wikidata.org/entity/Q1"}},
-            ]}
-        });
-        assert_eq!(entities_in(&json, None), ["Q1", "Q2"]);
-        assert_eq!(entities_in(&json, Some("x")), ["Q9"]);
+    fn entities_from_rows() {
+        let csv = |text: &str| csv::Reader::from_reader(std::io::Cursor::new(text.to_string()));
+        let e = "http://www.wikidata.org/entity/";
+        let text = &format!("q,x\n{e}Q1,{e}Q9\n{e}Q2,\n{e}Q1,\nnot an entity,\n{e}Q3,\n");
+        let found = entities_from_csv(csv(text), None, 2).unwrap();
+        assert_eq!((found.var.as_str(), found.ids, found.total), ("q", vec!["Q1".to_string(), "Q2".to_string()], 4));
+        assert_eq!(entities_from_csv(csv(text), Some("x"), 10).unwrap().ids, ["Q9"]);
+        assert!(entities_from_csv(csv(text), Some("y"), 10).is_err());
     }
 
     #[test]

@@ -259,13 +259,15 @@ async fn run(state: &AppState, request: &Request) -> Result<Report, Failure> {
         "" => Timestamp::now(),
         end => Timestamp::parse(end).ok_or(Failure::Problem("Invalid end date"))?,
     };
-    let mut ids =
-        state.sparql.entities(&request.sparql, None).await.map_err(|_| Failure::Problem("SPARQL query has failed"))?;
-    if ids.is_empty() {
+    let found = state
+        .sparql
+        .entities(&request.sparql, None, MAX_ITEMS)
+        .await
+        .map_err(|_| Failure::Problem("SPARQL query has failed"))?;
+    if found.ids.is_empty() {
         return Err(Failure::Problem("SPARQL query has no results"));
     }
-    let total = ids.len();
-    ids.truncate(MAX_ITEMS);
+    let (ids, total) = (found.ids, found.total);
     let languages = terms::languages_with(&request.user_lang, LANGUAGES);
     let skip_unchanged = flag(&request.skip_unchanged);
 
