@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Enter some strings, one per line, and find the items that have them as label or alias, in any language.</p>
+<form method="post" action="/relabel/">
+  <label>Strings <span class="hint">one per line; at most {{ max_lines }}</span>
+    <textarea name="labels" rows="6" required>{{ labels }}</textarea>
+  </label>
+  <label class="check"><input type="checkbox" name="remove_brackets" value="1"{% if remove_brackets %} checked{% endif %}> Search without a trailing “(…)”</label>
+  <label>Link the strings to Wikipedia <span class="hint">language code, e.g. <code>en</code>; optional</span>
+    <input type="text" name="lang" value="{{ lang }}">
+  </label>
+  <button>Find items</button>
+</form>
+{% if let Some(matches) = matches %}
+<h2>Matches</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>String</th><th>Items</th></tr></thead>
+  <tbody>
+{% for m in matches %}
+  <tr>
+    <th>{% if let Some(link) = m.link %}<a href="{{ link }}">{{ m.line }}</a>{% else %}{{ m.line }}{% endif %}</th>
+    <td>{% for (q, description) in m.items %}<div><a href="https://www.wikidata.org/wiki/{{ q }}">{{ q }}</a>{% if !description.is_empty() %} <span class="muted">{{ description }}</span>{% endif %}</div>
+    {% else %}<span class="muted">none</span>{% endfor %}</td>
+  </tr>
+{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
