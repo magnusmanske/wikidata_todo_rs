@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block head %}
+<style>
+.chart { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .hit { fill: transparent; }
+.chart .hit:hover { fill: color-mix(in srgb, var(--fg) 8%, transparent); }
+ul.legend { list-style: none; padding: 0; margin: 0.5rem 0; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.875rem; color: var(--muted); }
+ul.legend span { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 2px; margin-right: 0.35rem; vertical-align: -1px; }
+</style>
+{% endblock %}
+{% block content %}
+<p class="lead">Statements, references, labels and links of Wikidata items, from the dumps of each fortnight
+(until the job that counted them stopped). Statements can be referenced to both Wikipedia and other sources.</p>
+<p>{% if reverse %}Show <a href="/stats/">normal stacks</a>{% else %}Show <a href="/stats/?reverse">reverse stacks</a>{% endif %}
+· <a href="/stats/?action=download">Download the data</a> as JSON</p>
+<nav class="groups">{% for section in sections %}<a href="#s{{ loop.index }}">{{ section.title }}</a>{% endfor %}</nav>
+
+{% for section in sections %}
+<h2 id="s{{ loop.index }}">{{ section.title }}</h2>
+<ul class="legend">{% for (color, label) in section.legend %}<li><span style="background: {{ color }}"></span>{{ label }}</li>{% endfor %}</ul>
+{# The chart is made in stats.rs from numbers and escaped labels. #}
+{{ section.chart|safe }}
+<details>
+<summary>Table</summary>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Date</th>{% for header in section.headers %}<th class="num">{{ header }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in section.rows %}<tr><th>{{ row.date }}</th>
+  {%- for (value, note) in row.cells %}<td class="num">{{ value }}{% if let Some(note) = note %} <small class="muted">{{ note }}</small>{% endif %}</td>{% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+</details>
+{% endfor %}
+{% endblock %}
