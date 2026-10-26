@@ -1,0 +1,471 @@
+<template id='main-page-template'>
+	<div>
+		<tool-navbar>
+			<template slot='right'>
+				<router-link to='/random' tt_title="load_random_person_with_child">
+					<img src='https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Random_font_awesome.svg/60px-Random_font_awesome.svg.png'
+						border=0 width="32px" />
+				</router-link>
+				<widar></widar>
+			</template>
+		</tool-navbar>
+		<div style='margin:15px;margin-top:5px;'>
+			<div v-if='show_notice' class='alert alert-info alert-dismissible' role='alert'>
+				Try <strong><a href='../relator2/' class='alert-link'>Relator 2</a></strong>,
+				the new and improved version of this tool.
+				<button type='button' class='close' aria-label='Close' @click='show_notice=false'>
+					<span aria-hidden='true'>&times;</span>
+				</button>
+			</div>
+			<div v-if='typeof main_q=="undefined"'>
+				<div>
+					<span tt='enter_q'></span>
+					<input type='text' v-model='new_q' tt_placeholder='ph_enter_q' />
+					<router-link class='btn btn-outline-success' :to='"/"+new_q' tt="open_q"></router-link>
+				</div>
+				<div>
+					<a class='btn btn-outline-success' @click.prevent='loadRandomPersonWithChild'
+						tt='load_random_person_with_child'></a>
+				</div>
+			</div>
+			<div v-else-if='loading'>
+				<i tt='loading'></i>
+			</div>
+			<div v-else>
+				<div v-for='(row,row_num) in rows' class='row'>
+					<div v-if='row.length>0' class='col-sm-12'
+						style='border-bottom:1px dotted black;margin-bottom:15px;'>
+						<ul class='list-inline' style='text-align:center'>
+							<li v-for='item in row' class='list-inline-item'>
+								<row-item :item='item' :main='main_q'></row-item>
+							</li>
+						</ul>
+					</div>
+				</div>
+				<div v-if='widar.is_logged_in' class='row'>
+					<div style='margin-left:auto;margin-right:auto;'>
+						<div class='card'>
+							<h5 class="card-header" tt='create_new_item'></h5>
+							<div class="card-body" style='padding:2px'>
+								<p class="card-text">
+									<input type='text' class='' placeholder='name' v-model='add_item.name' />
+									<span style='margin-left:20px;'>
+										<label><input type='radio' v-model='add_item.gender' value='Q6581097' /> <span
+												tt='male'></span></label>
+										<label><input type='radio' v-model='add_item.gender' value='Q6581072' /> <span
+												tt='female'></span></label>
+									</span>
+									<span style='margin-left:20px;'>
+										Born <input type='text' v-model='add_item.born' tt_placeholder='ph_date' />
+										Died <input type='text' v-model='add_item.died' tt_placeholder='ph_date' />
+									</span>
+								<div>
+									<span tt='optional'></span>:
+									<span tt='the_peerage_id'></span> <input type='text' v-model='add_item.the_peerage'
+										tt_placeholder='the_peerage_placeholder' tt_title='the_peerage_hint' />
+								</div>
+								<div>
+									<span tt='main_item_is' :tt1='wd.getItem(main_q).getLabel(tt.language)'></span>
+									<select v-model='add_item.relation'>
+										<option v-for='prop in relation_properties' :value='prop'>
+											{{wd.getItem(prop).getLabel(tt.language)}}</option>
+									</select>
+									<span tt='of_new_item'></span>
+								</div>
+								<button class='btn btn-outline-success' @click.prevent='createItemHandler'
+									tt='create_new_item'></button>
+								</p>
+							</div>
+						</div>
+						<div class='card' v-if='external.length>0'>
+							<h5 class="card-header">External relations</h5>
+							<div class="card-body" style='padding:2px'>
+								<b>{{wd.getItem(main_q).getLabel(tt.language)}}</b> in the
+								<ul>
+									<li v-for='e,e_num in external'>
+										{{wd.getItem(e.relation_prop).getLabel(tt.language)}} of:
+										<span v-if='e.busy'>
+											"{{e.label}}" ...
+										</span>
+										<span v-else-if='has_item(e.q)' style='color:green'>
+											<wd-link :item='e.q' :wd='wd'></wd-link>
+											✓
+										</span>
+										<span v-else>
+											<span v-if="e.q!=''">
+												<wd-link :item='e.q' :wd='wd'></wd-link>
+												<!--
+											<a href='#' @click.prevent='TODOaddRelation(e,e_num)'>Add relation</a>
+											-->
+											</span>
+											<span v-else>
+												"{{e.label}}"
+												<a href='#' @click.prevent='createItemFromExternal(e,e_num)'>Create new
+													item</a>
+											</span>
+										</span>
+									</li>
+								</ul>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</template>
+
+<script>
+	'use strict';
+
+	let MainPage = Vue.extend({
+		props: ['main_q'],
+		data: function () {return {rows: [], loading: true, items: [], is_added: {}, add_item: {}, new_q: '', external: [], show_notice: true}},
+		created: function () {
+			let me = this;
+			me.init();
+		},
+		updated: function () {tt.updateInterface(this.$el);},
+		mounted: function () {tt.updateInterface(this.$el); $('#catalog_search_query_input').focus();},
+		methods: {
+			init: function (force_add_items = []) {
+				let me = this;
+				if (typeof me.main_q == "undefined") return;
+				if (me.main_q == 'random') return me.loadRandomPersonWithChild();
+				me.loading = true;
+				me.is_added = {};
+				me.items = [me.main_q];
+				me.rows = [[], [], []];
+				me.add_item = {name: '', gender: 'Q6581097', relation: '', born: '', died: '', the_peerage: '', q: ''};
+
+				let sparql = 'SELECT DISTINCT ?q { VALUES ?p { wdt:P22 wdt:P25 wdt:P3448 wdt:P26 wdt:P3373 wdt:P1038 wdt:P451 wdt:P40 } . VALUES ?main { wd:'
+					+ me.main_q
+					+ ' } { ?main ?p ?q } UNION { ?q ?p ?main } UNION { ?main ?p ?q2 . ?q2 ?p ?q } UNION { ?main ?p ?q2 . ?q ?p ?q2 } }';
+				wd.loadSPARQLitems(sparql, function (d) {
+					me.items = d;
+					if (-1 == $.inArray(me.main_q, me.items)) me.items.push(me.main_q);
+					$.each(force_add_items, function (dummy, q) {
+						if (-1 == $.inArray(q, me.items)) me.items.push(q);
+					});
+					wd.getItemBatch(me.items, function () {
+						me.external = [];
+						me.loadGeniRelatives(me.matchExternalItems);
+						me.loadDirectRelations(me.items, function () { // Two iterations of relationship load
+							me.loadDirectRelations(me.items, function () {
+								me.finalizeInit();
+							});
+						});
+					});
+				});
+			},
+			matchExternalItems: function () {
+				let me = this;
+				$.each(me.external, function (num, e) {
+					if (e.q != '') return;
+					$.getJSON('./api.php', {
+						action: 'wikidata_api_proxy',
+						wdaction: 'query',
+						list: 'search',
+						srnamespace: 0,
+						srsearch: 'haswbstatement:' + e.ext_prop + '=' + e.ext_id
+					}, function (d) {
+						Vue.set(me.external[num], 'busy', false);
+						if (d.query.search.length != 1) return;
+						const q = d.query.search[0].title;
+						Vue.set(me.external[num], 'q', q);
+					});
+				});
+			},
+			loadGeniRelatives: function (callback) {
+				let me = this;
+				let i = wd.getItem(me.main_q);
+				if (typeof i == 'undefined') return callback();
+				let geni_ids = i.getStringsForProperty("P2600");
+				if (geni_ids.length != 1) return callback();
+				let geni_id = geni_ids[0];
+				$.get('./api.php', {
+					action: 'load_geni_relations',
+					geni_id: geni_id
+				}, function (d) {
+					if (d.status != 'OK') {console.log(d); return callback();}
+					$.each(d.data, function (relation_prop, geni_ids) {
+						$.each(geni_ids, function (dummy, x) {
+							me.external.push({relation_prop: relation_prop, q: "", ext_prop: "P2600", ext_id: x[0], label: x[1], busy: true});
+						});
+					});
+					callback();
+				});
+			},
+			has_item: function (q) {
+				return this.items.indexOf(q) != -1;
+			},
+			// Item targets of a property, excluding deprecated statements. A
+			// deprecated rank is Wikidata's signal that a claim is known to be
+			// wrong (e.g. a marriage later disproven), so such relations must
+			// not be loaded into the view or used to place relatives.
+			liveRelationItems: function (item, prop) {
+				let claims = $.grep(item.getClaimsForProperty(prop), function (c) {
+					return c.rank != 'deprecated'
+						&& typeof c.mainsnak != 'undefined'
+						&& typeof c.mainsnak.datavalue != 'undefined'
+						&& c.mainsnak.datavalue.value['entity-type'] == 'item';
+				});
+				return $.map(claims, function (c) {return c.mainsnak.datavalue.value.id;});
+			},
+			hasLiveItemLink: function (item, prop, q) {
+				return -1 != $.inArray(q, this.liveRelationItems(item, prop));
+			},
+			loadDirectRelations: function (items, callback) {
+				let me = this;
+				let to_load = [];
+				$.each(items, function (dummy, q) {
+					let i = wd.getItem(q);
+					if (typeof i == 'undefined') return;
+					$.each(relation_properties, function (dummy2, prop) {
+						let targets = me.liveRelationItems(i, prop);
+						$.each(targets, function (dummy3, target_q) {
+							if (-1 != $.inArray(target_q, me.items)) return;
+							me.items.push(target_q);
+							to_load.push(target_q);
+						});
+					});
+				});
+				wd.getItemBatch(to_load, callback);
+			},
+			finalizeInit: function () {
+				let me = this;
+				me.is_added[me.main_q] = true;
+				me.rows[1].push({q: me.main_q, relation: 'identity'});
+				me.getRelationItems(me.main_q, 0, ['P22', 'P25', 'P3448'], false);
+				me.getRelationItems(me.main_q, 1, ['P26', 'P3373', 'P1038', 'P451'], false);
+				me.getRelationItems(me.main_q, 2, ['P40'], false);
+				me.getRelationItems(me.main_q, 0, ['P22', 'P25', 'P3448'], true);
+				me.getRelationItems(me.main_q, 1, ['P26', 'P3373', 'P1038', 'P451'], true);
+				me.getRelationItems(me.main_q, 2, ['P40'], true);
+				me.loading = false;
+			},
+			getRelationItems: function (main_q, row, props, do_reverse) {
+				let me = this;
+				let mi = wd.getItem(main_q); // Main item
+				if (typeof mi == 'undefined') return; // Paranoia
+				$.each(props, function (dummy, prop) {
+					$.each(me.items, function (dummy, q) {
+						if (typeof me.is_added[q] != 'undefined') return;
+						let i = wd.getItem(q);
+						if (typeof i == 'undefined') return;
+						let use_row;
+						if (do_reverse && me.hasLiveItemLink(i, prop, main_q)) { // q IS prop OF main_q
+							use_row = 2 - row;
+						}
+						if (!do_reverse && me.hasLiveItemLink(mi, prop, q)) { // main_q IS prop OF q
+							use_row = row;
+						}
+						if (typeof use_row == 'undefined') return;
+						me.is_added[q] = true;
+						me.rows[use_row].push({q: q, relation: prop});
+					});
+				});
+			},
+			createItemHandler: function () {
+				let me = this;
+				if (me.add_item.relation == '') {
+					alert("Relationship type is required");
+					return;
+				}
+
+				if (me.isThePeerageID(me.add_item.the_peerage)) {
+					me.findThePeerage(me.add_item.the_peerage, function () {
+						me.createItemFromInterface();
+					});
+				} else {
+					me.createItemFromInterface();
+				}
+			},
+			isThePeerageID: function (t) {
+				return /^\s*p\d+\.htm\#i\d+\s*$/.test(t);
+			},
+			findThePeerage: function (the_peerage_id, callback) {
+				let me = this;
+
+				let running = 2;
+				function fin() {
+					if (--running > 0) return;
+					callback();
+				}
+
+				// Check Wikdiata via SPARQL, re-use item if already exists
+				let sparql = 'SELECT ?q { ?q wdt:P4638 "' + the_peerage_id + '" }';
+				wd.loadSPARQLitems(sparql, function (d) {
+					if (d.length == 0) return fin(); // No results
+					if (d.length > 1) { // Multiple hits
+						alert("This The Peerage ID is already used by " + d.length + " items on Wikidata");
+						return;
+					}
+					me.add_item.q = d[0]; // Set existing item
+					fin();
+				});
+
+				// Check Mix'n'match, fill-in name and/or dates
+				$.get('/mix-n-match/api.php', {
+					query: 'get_entry_by_extid',
+					catalog: '695',
+					extid: the_peerage_id
+				}, function (d) {
+					if (d.status != 'OK') return fin();
+					let entry;
+					$.each(d.data.entries, function (k, v) {entry = v});
+					if (typeof entry == 'undefined') return fin();
+
+					if (me.add_item.name == '' && typeof entry.ext_name != 'undefined' && entry.ext_name != '') me.add_item.name = entry.ext_name;
+					if (me.add_item.born == '' && typeof entry.born != 'undefined' && entry.born != '') me.add_item.born = entry.born;
+					if (me.add_item.died == '' && typeof entry.died != 'undefined' && entry.died != '') me.add_item.died = entry.died;
+
+					fin();
+				}, 'json');
+
+			},
+			createItemFromExternal: function (e, e_num) {
+				let me = this;
+				let new_item = {
+					name: e.label,
+					relation: e.relation_prop,
+					gender: '',
+					born: '',
+					died: '',
+					the_peerage: '',
+					external: [[e.ext_prop, e.ext_id]],
+					q: ''
+				}
+				me.createItem(new_item, function (new_q) {
+					delete wd.items[me.main_q]; // Reset main item, force reload
+					me.init([new_q]);
+				});
+
+			},
+			createItemFromInterface: function () {
+				let me = this;
+				let new_item = {
+					name: me.add_item.name,
+					gender: me.add_item.gender,
+					relation: me.add_item.relation,
+					born: me.add_item.born,
+					died: me.add_item.died,
+					the_peerage: me.add_item.the_peerage,
+					q: me.add_item.q,
+				}
+				me.createItem(new_item, function (new_q) {
+					delete wd.items[me.main_q]; // Reset main item, force reload
+					me.init([new_q]);
+				});
+			},
+			createItem: function (new_item, callback) {
+				let me = this;
+
+				if ($.trim(new_item.name) == '') {
+					alert("Name is required");
+					return;
+				}
+
+				let params = {
+					action: 'wbeditentity',
+					'new': 'item',
+					data: {
+						labels: {},
+						claims: []
+					}
+				};
+
+
+				params.data.labels['mul'] = {language: 'mul', value: new_item.name}; // Name
+				params.data.claims.push(widar.newClaimEntity('P31', 'Q5')); // Human
+				if (new_item.gender != '') params.data.claims.push(widar.newClaimEntity('P21', new_item.gender)); // Gender
+				if (new_item.relation != '') params.data.claims.push(widar.newClaimEntity(new_item.relation, me.main_q)); // Relationship
+				if (new_item.born != '') params.data.claims.push(widar.newClaimDate('P569', new_item.born));
+				if (new_item.died != '') params.data.claims.push(widar.newClaimDate('P570', new_item.died));
+				if (me.isThePeerageID(new_item.the_peerage)) params.data.claims.push(widar.newClaimString('P4638', new_item.the_peerage)); // TODO convert the_peerage to new_item.external
+				if ((new_item.external || []).length > 0) {
+					$.each(new_item.external, function (dummy, prop_value) {
+						if (prop_value[0] == '' || prop_value[1] == '') return;
+						params.data.claims.push(widar.newClaimString(prop_value[0], prop_value[1]));
+					});
+				}
+
+				// Prep data
+				params.data = JSON.stringify(params.data);
+				params = {
+					action: 'generic',
+					summary: 'New item using [[:toollabs:wikidata-todo/relator|Relator]]',
+					tool_hashtag: 'relator',
+					json: JSON.stringify(params)
+				};
+
+				if (new_item.q != '') { // Just link up existing item
+
+					widar.addClaimToItem( // Add realtionship to existing item
+						new_item.q,
+						widar.newClaimEntity(new_item.relation, me.main_q),
+						'Adding relationship using [[:toollabs:wikidata-todo/relator|Relator]]',
+						'relator', function (d) {
+							if (d.error != 'OK') {alert('widar_2: ' + d.error); return;}
+							me.linkUpNewItem(new_item.q, new_item.relation, new_item.gender, callback);
+						});
+
+				} else { // Create new item, then link it up
+					widar.run(params, function (d) {
+						if (d.error != 'OK') {alert('widar_3: ' + d.error); return;}
+						new_item.q = d.res.entity.id;
+						me.linkUpNewItem(new_item.q, new_item.relation, new_item.gender, callback);
+					});
+				}
+
+			},
+			linkUpNewItem: function (new_q, relation, gender, callback) {
+				let me = this;
+				if (typeof mirror_properties[relation] == 'undefined') { // Can't add mirror property
+					return callback(new_q);
+				}
+
+				let mp = mirror_properties[relation];
+				if (mp.length == 1) {
+					mp = mp[0];
+				} else {
+					if (gender == '') return callback(new_q);
+					if (gender == 'Q6581097') mp = mp[0]; // New item is male
+					else mp = mp[1]; // New item is female
+				}
+
+				me.addRelationship(mp, me.main_q, new_q, callback);
+			},
+			addRelationship: function (relation_prop, from_q, to_q, callback) {
+				widar.addClaimToItem(
+					from_q,
+					widar.newClaimEntity(relation_prop, to_q), // Relationship, mirror property
+					'Adding relationship using [[:toollabs:wikidata-todo/relator|Relator]]',
+					'relator', function (d) {
+						if (d.error != 'OK') {alert('widar_1: ' + d.error); return;}
+						callback(to_q);
+					});
+
+			},
+			loadRandomPersonWithChild: function () {
+				let me = this;
+				me.external = [];
+				$.get(api, {
+					action: 'random_person'
+				}, function (d) {
+					if (d.status != 'OK') {
+						alert(d.status);
+						return;
+					}
+					me.$router.push('/' + d.data);
+				}, 'json');
+			}
+		},
+		watch: {
+			'$route'(to, from) {
+				this.init();
+			},
+		},
+		template: '#main-page-template'
+	});
+</script>

@@ -1,0 +1,70 @@
+<!DOCTYPE HTML>
+<html><head>
+<META NAME="ROBOTS" CONTENT="NOINDEX, NOFOLLOW">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title tt="toolname"></title>
+<link rel="stylesheet" href="https://tools-static.wmflabs.org/cdnjs/ajax/libs/twitter-bootstrap/4.0.0/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://magnustools.toolforge.org/resources/html/wikimedia.css">
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/twitter-bootstrap/4.0.0/js/bootstrap.bundle.min.js"></script>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/vue/2.5.13/vue.min.js"></script>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/vue-router/3.0.1/vue-router.min.js"></script>
+<script src="https://tooltranslate.toolforge.org/tt.js"></script>
+<script src="https://magnustools.toolforge.org/resources/js/wikidata.js"></script>
+<script src="https://magnustools.toolforge.org/resources/vue/shared.js"></script>
+
+</style>
+
+</head>
+
+<body>
+	<div id='app'>
+		<router-view><i tt='loading'></i></router-view>
+	</div>
+</body>
+
+<template id='main-page-template'>
+	<div>
+		!!
+				<typeahead-search type='item' ></typeahead-search>
+
+	</div>
+</template>
+
+<script>
+
+let router ;
+let app ;
+let wd = new WikiData() ;
+
+let MainPage = Vue.extend ( {
+    props : [] ,
+    components : {
+//    	'typeahead-search':typeahead_search
+    } ,
+    data : function () { return {} } ,
+    created : function () {
+ console.log("OK");
+    } ,
+    template:'#main-page-template'
+} ) ;
+
+
+$(document).ready ( function () {
+	Promise.all ( [
+		vue_components.loadComponents ( ['widar','wd-date','wd-link','tool-translate','tool-navbar','typeahead-search'] ) ,
+		new Promise(function(resolve, reject) { wd.getItemBatch ( relation_properties , resolve ) } )
+	] )	.then ( () => {
+			const routes = [
+			  { path: '/', component: MainPage , props:true },
+			  { path: '/:main_q', component: MainPage , props:true },
+			] ;
+			router = new VueRouter({routes}) ;
+			app = new Vue ( { router } ) .$mount('#app') ;
+		} ) ;
+} ) ;
+
+
+</script>
+
+</html>

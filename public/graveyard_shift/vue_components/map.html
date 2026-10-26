@@ -1,0 +1,94 @@
+<style>
+    div.graveyard_map {
+        height:100%;
+    }
+</style>
+
+<template id='graveyard-map-template'>
+<div :id='id' class="graveyard_map">
+</div>
+</template>
+
+
+<script>
+'use strict';
+
+var mapcounter = 0 ;
+
+Vue.component ( 'graveyard-map' , {
+    props : [ 'lat','lon','zoom','people','user_position' ] ,
+    data : function () { return {} } ,
+    created : function () {
+        mapcounter++ ;
+        this.id = "graveyard_map_" + mapcounter ;
+    } ,
+    updated : function () { tt.updateInterface(this.$el) } ,
+    mounted : function () {
+        tt.updateInterface(this.$el) ;
+        this.generate_map();
+    } ,
+    methods : {
+        generate_map : function () {
+            let me = this ;
+
+            let icon_size = 16 ;
+            let grave_icon_red = L.icon({
+                iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Round_cross.svg/'+icon_size+'px-Round_cross.svg.png',
+                iconSize: [icon_size, icon_size],
+                iconAnchor: [0,0],
+                popupAnchor: [0,0],
+            });
+            let grave_icon_green = L.icon({
+                iconUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/Cross_green_icon.svg/'+icon_size+'px-Cross_green_icon.svg.png',
+                iconSize: [icon_size, icon_size],
+                iconAnchor: [icon_size/2,icon_size/2],
+                popupAnchor: [0,0],
+            });
+
+    
+            var style = 'osm-intl';
+            var server = 'https://maps.wikimedia.org/';
+            
+            // Create a map
+            var map = L.map(me.id).setView([me.lat*1,me.lon*1], me.zoom*1);
+
+            // Add a map layer
+            L.tileLayer(server + style + '/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+                //id: o.id+'-01',
+                //attribution: 'Wikimedia maps beta | Map data &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+            }).addTo(map);
+            
+            L.marker([me.user_position.latitude*1, me.user_position.longitude*1]).addTo(map);
+
+            let markers = [] ;
+            $.each ( me.people , function(q,data) {
+                if ( typeof data.grave_coordinates == 'undefined' ) return ;
+                //console.log(JSON.parse(JSON.stringify(data.grave_coordinates)));
+                let marker = L.marker([data.grave_coordinates.lat*1, data.grave_coordinates.lon*1],{
+                    icon:(typeof data.grave_image == 'undefined')?grave_icon_red:grave_icon_green,
+                }) ;
+                marker.bindPopup(function(){
+                    let html = "<div>" ;
+                    html += "<div><a href='https://www.wikidata.org/wiki/"+q+"' target='_blank' class='wikidata'>"+data.label+"</a></div>";
+                    html += "<div>" + data.born_pretty + " | " + data.died_pretty + "</div>" ;
+                    if ( typeof data.grave_image != 'undefined' ) {
+                        let thumb_url = data.grave_image.replace(/^http:/,'https:').replace("'","&39;")+"?width=120"; ;
+                        html += "<div style='text-align:center;'><img src='"+thumb_url+" alt='loading'/></div>" ;
+                    }
+                    html += "</div>" ;
+                    return html ;
+                });
+                markers.push(marker);
+            });
+            let group = new L.featureGroup(markers);
+            group.addTo(map);
+            if ( markers.length > 1 ) map.fitBounds(group.getBounds());
+
+            map.options.maxZoom = 20 ;
+        } ,    
+    },
+    template : '#graveyard-map-template'
+} ) ;
+
+</script>

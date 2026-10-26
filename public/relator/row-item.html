@@ -1,0 +1,134 @@
+<template id='row-item-template'>
+	<div class='card' :style='(main==item.q?"border-width:5px":"")+";text-align:left"'>
+		<h5 class="card-header">
+			<router-link v-if='main!=item.q' :to='"/"+item.q' tt_title='make_main_item'>⌖</router-link>
+
+			<span :style='item.relation=="identity"?"font-weight:bold":""'>
+				<wd-link :item='item.q' :wd='wd'></wd-link>
+			</span>
+
+			<span v-if='i.hasClaimItemLink("P21","Q6581097")'>♂</span>
+			<span v-else-if='i.hasClaimItemLink("P21","Q6581072")'>♀</span>
+			<span v-else>?</span>
+			<small>[{{item.q}}]</small>
+		</h5>
+		<div class="card-body" style='padding:2px'>
+			<p class="card-text">
+				<div>
+					<small>
+						{{i.getDesc()}}
+					</small>
+				</div>
+				<div>
+					<span v-for='claim in i.getClaimsForProperty("P569")' style='padding-right:10px;'>*<wd-date :tv='i.getClaimDate(claim)'></wd-date></span>
+					<span v-for='claim in i.getClaimsForProperty("P570")'>†<wd-date :tv='i.getClaimDate(claim)'></wd-date></span>
+				</div>
+				<div v-for='prop in relation_properties'>
+					<div v-for='q in i.getClaimItemsForProperty(prop)'>
+						<span>
+							{{wd.getItem(prop).getLabel()}}:
+						</span>
+						<span v-if='q==main'><b>{{wd.getItem(q).getLabel()}}</b></span>
+						<span v-else>
+							<router-link :to='"/"+q' tt_title='make_main_item'>⌖</router-link>
+							<wd-link :item='q' :wd='wd'></wd-link>
+							<small>[{{q}}]</small>
+						</span>
+					</div>
+				</div>
+				<div v-if='widar.is_logged_in'>
+					<span>
+						<a href='#' @click.prevent='$("span.hidden_action[forq="+item.q+"]").toggle()' style='font-size:16pt' tt_title='add_new_relation'>⊕</a>
+					</span>
+					<span class='hidden_action' :forq='item.q'>
+						<span tt='this_is_the'></span>
+						<select v-model='new_relation'>
+							<option v-for='prop in relation_properties' :value='prop'>{{wd.getItem(prop).getLabel()}}</option>
+						</select>
+						<span tt='of'></span>
+						<input type='text' v-model='new_target' placeholder="Qxxx" />
+						<button class='btn btn-outline-success' @click.prevent='addRelation' tt='add_relation'></button>
+
+					</span>
+				</div>
+			</p>
+		</div>
+	</div>
+</template>
+
+<script>
+'use strict';
+
+Vue.component ( 'row-item' , {
+	template : '#row-item-template' ,
+	props : [ 'item' , 'main' ] ,
+	data : function () { return { i:undefined , new_relation:'' , new_target:'' } } ,
+	created : function () {
+		this.i = wd.getItem(this.item.q) ;
+		tt.updateInterface(this.$el) ;
+	} ,
+	updated : function () { tt.updateInterface(this.$el) ; } ,
+	mounted : function () { tt.updateInterface(this.$el) } ,
+	methods : {
+		addRelationBetweenItems : function ( source_q , prop , target_q , callback ) {
+			let me = this ;
+			let item = wd.getItem(source_q) ;
+			if ( typeof item != 'undefined' ) { // Don't add statement if it already exists
+				if ( item.hasClaimItemLink(prop,target_q) ) return callback() ;
+			}
+
+			widar.addClaimToItem (
+				source_q ,
+				widar.newClaimEntity ( prop , target_q ) ,
+				'Adding relationship using [[:toollabs:wikidata-todo/relator|Relator]]' ,
+				'relator' , function (d) {
+					if ( d.error != 'OK' ) { alert ( 'widar_4: '+d.error ) ; return ; }
+					callback() ;
+			} ) ;
+
+		} ,
+		addRelation : function () {
+			let me = this ;
+			if ( me.new_relation == '' ) { alert ( "Relation is required" ) ; return ; }
+			if ( me.new_target == '' ) { alert ( "Target is required" ) ; return ; }
+			if ( !/^Q\d+$/.test(me.new_target) ) { alert ( "Target needs to be 'Qxxx'" ) ; return ; }
+
+			wd.getItemBatch ( [ me.new_target ] , function () {
+
+				let i_target = wd.getItem ( me.new_target ) ;
+				if ( typeof i_target == 'undefined' ) {
+					alert ( "Item " + me.new_target + " does not exist" ) ;
+					return ;
+				}
+
+				function fin () {
+					/*
+					// THIS DOES NOT SEEM TO WORK, RELOADING PAGE INSTEAD
+					delete wd.items[me.new_target] ;
+					delete wd.items[me.item.q] ;
+					me.$router.push ( '/'+me.main ) ;
+					*/
+					location.reload(); 
+				}
+
+				me.addRelationBetweenItems ( me.new_target , me.new_relation , me.item.q , function () {
+
+					// Try to add mirror property
+					if ( typeof mirror_properties[me.new_relation] != 'undefined' ) {
+						let gender = i_target.getClaimItemsForProperty ( 'P21' , true ) ;
+						if ( gender.length != 1 ) return fin() ; // No gender
+						gender = gender[0] ;
+						let mp = mirror_properties[me.new_relation] ;
+						if ( mp.length == 1 ) mp = mp[0] ;
+						else mp = ( gender == 'Q6581097' ) ? mp[0] : mp[1] ;
+						me.addRelationBetweenItems ( me.item.q , mp , me.new_target , function () {
+							fin()
+						} ) ;
+					} else fin() ;
+
+				} ) ;
+			} ) ;
+		}
+	}
+} ) ;
+</script>

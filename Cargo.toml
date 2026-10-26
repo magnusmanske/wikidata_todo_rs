@@ -18,6 +18,8 @@ csv = "1"
 clap = { version = "4", features = ["derive", "env"] }
 futures = "0.3"
 hmac = "0.12"
+include_dir = "0.7"
+mime_guess = "2"
 percent-encoding = "2"
 rand = "0.9"
 regex = "1"

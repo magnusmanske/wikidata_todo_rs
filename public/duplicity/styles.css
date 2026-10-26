@@ -1,0 +1,84 @@
+a { text-decoration: none; }
+
+[v-cloak] { display: none !important; }
+
+.duplicity-error-toast-container {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 1080;
+    pointer-events: none;
+    max-width: 24rem;
+}
+.duplicity-error-toast {
+    pointer-events: auto;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    opacity: 0.95;
+    margin-top: 0.5rem;
+}
+
+.article-toolbar .card-body { padding: 0.5rem 0.75rem; }
+
+.article-frame-row { min-height: calc(100vh - 11rem); }
+.article-frame {
+    width: 100%;
+    height: 100%;
+    min-height: calc(100vh - 11rem);
+    border: 1px solid var(--bs-border-color, #ced4da);
+    border-radius: 0.25rem;
+}
+
+.article-search-col { display: flex; flex-direction: column; min-height: 0; }
+.article-search-results {
+    list-style: decimal inside;
+    padding: 0;
+    overflow-y: auto;
+    max-height: calc(100vh - 14rem);
+    border-radius: 0.25rem;
+}
+.article-search-results li { line-height: 1.2; padding: 0.15rem 0.4rem; }
+.article-search-results li.selected { background-color: #ddd; }
+.article-search-results li.has_sitelink { border-right: 3px solid #ff4848 !important; }
+.article-search-results li.is_disambig  { border-left:  3px solid #48ff48 !important; }
+
+.duplicity-stats-graph {
+    width: 100%;
+    max-width: 940px;
+    height: 500px;
+}
+
+/* Styles for the shared <pagination> component (resources/vue_es6/pagination.js),
+   which documents these classes as living in a "fist-shared.css" that is not part
+   of this tool. Kept local until/unless they are upstreamed to the shared lib. */
+.fist-pag-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+}
+.fist-pag-btn {
+    min-width: 2.25rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--bs-border-color, #ced4da);
+    border-radius: 0.25rem;
+    background: #fff;
+    color: var(--bs-link-color, #0d6efd);
+    line-height: 1.4;
+    cursor: pointer;
+}
+.fist-pag-btn:hover:not(:disabled) { background: #e9ecef; }
+.fist-pag-btn:disabled { color: #adb5bd; cursor: default; }
+.fist-pag-active {
+    background: var(--bs-primary, #0d6efd);
+    border-color: var(--bs-primary, #0d6efd);
+    color: #fff;
+    font-weight: 600;
+}
+.fist-pag-active:hover { background: var(--bs-primary, #0d6efd) !important; }
+.fist-pag-ellipsis { border-color: transparent; color: #6c757d; }
+.fist-pag-info {
+    margin-left: 0.5rem;
+    color: #6c757d;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}

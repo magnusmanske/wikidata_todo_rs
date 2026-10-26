@@ -7,7 +7,7 @@ database connections, askama templates, one stylesheet.
 
 ## Decisions
 - URLs and parameters stay; pages moved to `/<name>/` with redirects from `.php`, APIs stay where they are.
-- Server-rendered tools share the new look. The Vue apps (Duplicity, Relator, Relator2, WikiFlix, Graveyard shift, Papertrail) and the other static HTML/JS pages are served as they are; only their APIs are ported.
+- Server-rendered tools share the new look. The Vue apps (Duplicity, Relator, Relator2, WikiFlix, Graveyard shift, Papertrail) keep their interface; their files moved into this repository (`public/`, built into the binary), their APIs are ported. Other static files (pages, scripts, data, and WikiFlix's generated `config.js`) are served from the PHP checkout as they are.
 - Tools that broke (WDQ, `wb_terms`, `revision_compat`, removed columns) are fixed where still useful, else retired.
 - Jobs that feed live tools are ported; dead ones retired; the Wikispecies bot stays PHP.
 - Labels come from the term store (`wbt_*`, own server), never the frozen copies in the main database; the tools' own SPARQL avoids what WDQS's successor (QLever) lacks. Heavy job queries fall back to QLever when WDQS times out.
@@ -40,7 +40,7 @@ WDQ from the browser stay broken.
 | PHP job | Now |
 |---|---|
 | update-duplicity | `duplicity-update` |
-| add-candidates | `duplicity-candidates` (needs the ID fix below) |
+| add-candidates | `duplicity-candidates` |
 | update-game-merge-by-id | `merge-by-id-update` |
 | pasleim-projectmerge-update | `pasleim-update` |
 | update-noitems | `noitems-update` (daily) |
@@ -51,8 +51,7 @@ WDQ from the browser stay broken.
 ## Cutover
 1. Push this repository to GitHub; `./build.sh` builds the image.
 2. `$TOOL_DATA_DIR/wikidata_todo_rs.json` from `config.json.template`, with a `cookie_key` (`openssl rand -hex 64`); `oauth.ini` is already in the tool home. Check that the OAuth consumer accepts the callbacks `https://wikidata-todo.toolforge.org/api.php?…`, `/duplicity/api.php?…`, `/relator/api.php`, `/relator2/api.php` (the PHP used the same).
-3. `duplicity_p.candidates` has used up its IDs (AUTO_INCREMENT at 2^32); before `duplicity-candidates` can add anything:
-   `ALTER TABLE s51211__duplicity_p.candidates MODIFY id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT;`
+3. ~~`duplicity_p.candidates` had used up its IDs~~: `id` is BIGINT now (done 2026-10-26).
 4. `toolforge webservice stop && toolforge webservice buildservice start --mount=all`, then `./smoke_test.sh`.
 5. Delete the PHP jobs replaced or retired above (`toolforge jobs delete <name>`), then `toolforge jobs load jobs.yaml`.
 
@@ -63,3 +62,4 @@ Rollback: `toolforge webservice stop && toolforge webservice php8.4 start`; PHP 
 - `project_stats` estimates labels per language from a sample: exact counts take hours.
 - `beacon` on the largest properties (GND, VIAF) is cut off by WDQS's 60 s limit (marked in the output); `subclass_dates` and `best_cats` could use QLever too.
 - geni.com blocks bots, so Relator's Geni import finds nothing.
+- The apps' copies in the PHP repository (`public_html/duplicity/` etc.) are no longer served; changes to the apps belong here now. They can be removed there after the switch.

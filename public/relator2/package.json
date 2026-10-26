@@ -1,0 +1,8 @@
+{
+    "name": "relator2",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test": "node tests/run.js"
+    }
+}

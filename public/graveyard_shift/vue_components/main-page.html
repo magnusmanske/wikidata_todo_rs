@@ -1,0 +1,297 @@
+<template id='main-page-template'>
+<div class='container'>
+    <div class='lead'>
+        <div>
+            <span tt='main_blurb'></span>
+            <a href='https://www.wikidata.org/wiki/Wikidata:Graveyard_shift' class='wikidata' target='_blank' tt='here'></a>
+        </div>
+    </div>
+
+    <div v-if='error!=""' class="alert alert-danger" role="alert">{{error}}</div>
+    <div v-if='warning!=""' class="alert alert-warning" role="alert">{{warning}}</div>
+
+    <div v-if='step==-1'>
+        <i tt='step-1_blurb'></i>
+    </div>
+
+    <div v-else-if='step==0'>
+        <i tt='step0_blurb'></i>
+    </div>
+
+    <div v-else-if='step=="loading_cemetery"'>
+        <i tt='loading_cemetery'></i>
+    </div>
+
+    <div v-else-if='step==1'>
+        <h1>Step 1</h1>
+        <p tt='step1_blurb'></p>
+        <div v-if='cemeteries.length>0'>
+            <table class='table table-striped table-sm'>
+                <thead>
+                    <tr>
+                        <th tt='cemetery'></th>
+                        <th tt='distance'></th>
+                        <th tt='type'></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="c in cemeteries">
+                        <td>
+                            <a href='#' @click.prevent='cemetery_q=c.q;set_cemetary()'>
+                                <wd-link :item='c.q' as_text='1'></wd-link>
+                            </a>
+                            <small>[<wd-link :item='c.q' :label='c.q'></wd-link>]</small>
+                        </td>
+                        <td>{{c.distance}} km</td>
+                        <td>{{c.instance_of}}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div v-else>
+            <i tt='no_cemeteries_found'></i>
+        </div>
+        <form>
+            <span tt='cemetery'></span>:
+            <input type='text' v-model='cemetery_q' placeholder='Qxxx' />
+            <input v-if='cemetery_q.match(/^[Qq]\d+$/)' type='submit' @click.prevent='set_cemetary' class="btn btn-outline-primary" value='Use cemetery' />
+        </form>
+    </div>
+
+    <div v-else-if='step==2' style='height:500px'>
+        <h1>
+            <wd-link :item='cemetery_q' as_text='1'></wd-link> 
+            <small>[<wd-link :item='cemetery_q' :label='cemetery_q'></wd-link>]</small>
+        </h1>
+        <graveyard-map :lat='graveyard_position.latitude' :lon='graveyard_position.longitude' zoom=16 :user_position='user_position' :people='people'>
+        </graveyard-map>
+        <div>
+            <table class='table table-striped table-sm'>
+                <thead>
+                    <tr>
+                        <th tt='person_name'></th>
+                        <th tt='born'></th>
+                        <th tt='died'></th>
+                        <th tt='has_grave_image'></th>
+                        <th tt='has_grave_coordinates'></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for='pq in people_list' key='"person_row_"+pq'>
+                        <td>
+                            <wd-link :item='pq' small_q='1'></wd-link>
+                        </td>
+                        <td nowrap>
+                            {{people[pq].born_pretty}}
+                        </td>
+                        <td nowrap>
+                            {{people[pq].died_pretty}}
+                        </td>
+                        <td>
+                            <span v-if='typeof people[pq].grave_image!="undefined"' style='color:green'>&#10003;</span>
+                            <span v-else>—</span>
+                        </td>
+                        <td>
+                            <span v-if='typeof people[pq].grave_coordinates!="undefined"' style='color:green'>&#10003;</span>
+                            <span v-else>—</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+</template>
+
+<script>
+'use strict';
+
+let MainPage = Vue.extend ( {
+    props : [ 'initial_cemetery_q' ] ,
+    data : function () { return { step:0 , cemeteries:[] , error:'' , warning:'' , cemetery_q:'' , graveyard_position:{} , user_position:{} , people:{} ,
+        image_cache:{} , people_list:[] } } ,
+    created : function () {
+        let me = this ;
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(me.positionHasChanged, me.positionIsLost, {maximumAge:0,enableHighAccuracy:true}          );
+            navigator.geolocation.getCurrentPosition(
+                me.take_coordinates,
+                function(error){
+                    console.log(error);
+                    me.warning = "Could not determine your position" ;
+                    me.cemetery_q = me.initial_cemetery_q ;
+                    me.set_cemetary();
+                },
+                {timeout:5000}
+                );
+        } else {
+            me.warning = "Could not determine your position" ;
+            me.cemetery_q = me.initial_cemetery_q ;
+            me.set_cemetary();
+            //me.error = "Your browser is too old, or you have turned off geolocation. I can't work like this!";
+        }
+    } ,
+    updated : function () { tt.updateInterface(this.$el) ; } ,
+    mounted : function () { tt.updateInterface(this.$el) ; } ,
+    methods : {
+        take_coordinates : function (position) {
+            let me = this ;
+            me.user_position = position.coords ;
+            me.cemeteries = [] ;
+
+            if ( typeof me.initial_cemetery_q!='undefined' ) {
+                me.cemetery_q = me.initial_cemetery_q ;
+                me.set_cemetary();
+                return ;
+            }
+
+
+            let location_point = '"Point('+me.user_position.longitude+' '+me.user_position.latitude+')"^^geo:wktLiteral' ;
+            let radius_km = 10 ;
+            let max_results = 10 ;
+            let sparql = 'SELECT DISTINCT ?cemetery ?cemeteryLabel ?dist ?instance_ofLabel WHERE { ?cemetery wdt:P31/wdt:P279* wd:Q39614 . ' +
+                            'SERVICE wikibase:around { ?cemetery wdt:P625 ?coordinate_location. bd:serviceParam wikibase:center '+
+                            location_point+
+                            '. bd:serviceParam wikibase:radius "'+
+                            radius_km+
+                            '". bd:serviceParam wikibase:distance ?dist. } SERVICE wikibase:label { bd:serviceParam wikibase:language "en,de,fr,es,it". } '+
+                            'OPTIONAL { ?cemetery wdt:P31 ?instance_of. } } ORDER BY ?dist LIMIT '+
+                            max_results;
+            wd.loadSPARQL(sparql,function(d){
+                $.each ( d.results.bindings , function ( k , v ) {
+                    me.cemeteries.push({
+                        q:wd.itemFromBinding(v.cemetery),
+                        label:v.cemeteryLabel.value||'',
+                        distance: v.dist.value * 1,
+                        instance_of:v.instance_ofLabel.value,
+                    });
+                } ) ;
+                me.step = 1 ;
+            },function(x,y,z){
+                me.warning = "SPARQL to find closest cemeteries has failed!";
+                console.log(x,y,z)
+            })
+        },
+        set_cemetary: function() {
+            let me = this ;
+            if ( typeof me.cemetery_q == 'undefined' || me.cemetery_q == '' ) {
+                me.error = "No cemetery set" ;
+                return ;
+            }
+            me.cemetery_q = me.cemetery_q.toUpperCase();
+            me.graveyard_position = me.user_position ; // Fallback
+            me.step = 'loading_cemetery' ;
+            let to_load = [ me.cemetery_q ] ;
+            let sparql = "SELECT ?person ?grave_image ?grave_coordinates { ?person wdt:P119 wd:"+me.cemetery_q+
+                " OPTIONAL { ?person wdt:P1442 ?grave_image }" +
+                " OPTIONAL { ?person p:P119 [pq:P625 ?grave_coordinates] }" +
+                //" OPTIONAL { ?person wdt:P569 ?born }" +
+                //" OPTIONAL { ?person wdt:P570 ?died }" +
+                " }" ;
+            wd.loadSPARQL(sparql,function(d){
+                $.each ( d.results.bindings , function ( k , v ) {
+                    let person_q = wd.itemFromBinding(v.person);
+                    to_load.push(person_q) ;
+                    let p = {
+                        q:person_q,
+                        label:person_q, // Fallback
+                        grave_image: me.sanitizeFilename((v.grave_image||{}).value),
+                        born_pretty:'—', // Fallback
+                        died_pretty:'—', // Fallback
+                    } ;
+                    if ( typeof v.grave_coordinates != 'undefined' ) {
+                        let point = v.grave_coordinates.value.match(/Point\((\S+?) (\S+?)\)/) ;
+                        if ( point !== null ) p.grave_coordinates = {lat:point[2]*1,lon:point[1]*1} ;
+                    }
+                    me.people[person_q] = p ;
+                } ) ;
+
+                wd.getItemBatch(to_load,function() {
+                    let i = wd.getItem(me.cemetery_q);
+                    if ( typeof i != 'undefined' ) {
+                        let coordinates = i.getClaimsForProperty('P625') ;
+                        if ( coordinates.length > 0 ) {
+                            me.graveyard_position = {
+                                latitude:coordinates[0].mainsnak.datavalue.value.latitude*1,
+                                longitude:coordinates[0].mainsnak.datavalue.value.longitude*1,
+                            } ;
+                        }
+                    }
+                    $.each ( me.people , function ( q , data ) {
+                        let i = wd.getItem(q);
+                        if ( typeof q == 'undefined' ) return ;
+                        me.people[q].born = i.getClaimsForProperty('P569')[0] ;
+                        me.people[q].died = i.getClaimsForProperty('P570')[0] ;
+                        me.people[q].born_pretty = me.pretty_date(me.people[q].born) ;
+                        me.people[q].died_pretty = me.pretty_date(me.people[q].died) ;
+                        me.people[q].label = i.getLabel();
+                    } ) ;
+                    //me.updateImageCache(me.graveyard_position.latitude,me.graveyard_position.longitude,me.updateGraveLocations); // Not worth it?
+                    me.sort_filter_people()
+                    me.step = 2 ;
+                });
+            } ) ;
+        } ,
+        sort_filter_people : function(){
+            let me = this ;
+            let list = [] ;
+            $.each(me.people,function(q,data){
+                // TODO filters
+                list.push(q);
+            });
+            list.sort(me.compare_people);
+            me.people_list = list ;
+        },
+        compare_people : function ( q1 , q2 ) {
+            let label1 = this.people[q1].label.replace(/^.+ /,'').toUpperCase();
+            let label2 = this.people[q2].label.replace(/^.+ /,'').toUpperCase();
+            return (label1<label2)?-1:((label1>label2)?1:0) ;
+        } ,
+        pretty_date : function ( d ) {
+            if ( typeof d == 'undefined' ) return '—' ;
+            let d2 = d.mainsnak.datavalue.value ;
+            let ret = d2.time.replace(/^\+{0,1}/,'').replace(/T.*$/,'');
+            if ( d2.precision == 11 ) {} // All done
+            else if ( d2.precision == 10 ) ret = ret.replace(/-\d{2}$/,'') ;
+            else if ( d2.precision == 9 ) ret = ret.replace(/-\d{2}-\d{2}$/,'') ;
+            else ret = ret.replace(/-\d{2}-\d{2}$/,'')+"s" ;
+            return ret ;
+        } ,
+        positionHasChanged:function( position ) {
+            // TODO update map? Maybe without redraw?
+            //this.user_position = position.coords ;
+        },
+        positionIsLost:function(){
+            // TODO?
+        } ,
+        updateGraveLocations: function() {
+            let me = this ;
+            $.each(me.people,function(q,data){
+                if ( typeof data.grave_image == 'undefined' ) return ;
+                if ( typeof me.image_cache[data.grave_image] == 'undefined' ) return ;
+                if ( typeof me.people[q].grave_coordinates != 'undefined' ) return ;
+                me.people[q].grave_coordinates = me.image_cache[data.grave_image] ;
+                //console.log("!!");
+            });
+            //console.log("DONE");
+        } ,
+        sanitizeFilename: function(fn) {
+            if ( typeof fn == 'undefined' ) return ;
+            return fn.replace(/_/g,' ') ;
+        } ,
+        updateImageCache:function(lat,lon,callback) {
+            let me = this ;
+            let url = "https://commons.wikimedia.org/w/api.php?callback=?&format=json&action=query&list=geosearch&gsprimary=primary&gsnamespace=6&gsradius=1000&gslimit=500&gscoord="+lat+"|"+lon;
+            $.getJSON(url,function(d){
+                $.each ( d.query.geosearch , function(k,v) {
+                    let filename = me.sanitizeFilename(v.title.replace(/^File:/,'')) ;
+                    me.image_cache[filename] = v ;
+                } ) ;
+                if ( typeof callback != 'undefined' ) callback() ;
+            } ) ;
+        }
+    } ,
+    template:'#main-page-template'
+} ) ;
+</script>

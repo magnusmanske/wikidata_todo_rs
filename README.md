@@ -7,8 +7,10 @@ Relator, WikiFlix, …), the Distributed Game APIs, and the OAuth editing
 service (Widar) they share.
 
 This replaces the PHP version ([wikidata-todo](https://codeberg.org/magnusmanske/wikidata-todo)).
-That checkout stays in use for what is not a web service: the static pages,
-scripts and apps in `public_html` (served from there by this service), and the
+The apps with their own (Vue) interface now live here, in `public/`: Duplicity,
+Relator, Relator2, WikiFlix, Graveyard shift and Papertrail. The PHP checkout
+stays in use for the other static files in `public_html` (pages, scripts, data;
+served from there by this service), the shared `resources/`, and the
 Wikispecies bot.
 
 ## Tools
@@ -75,6 +77,7 @@ the app), `duplicity/api.php`, `duplicity_game_api.php`,
 Where a parameter took WDQ (the long gone Wikidata Query), it now takes SPARQL,
 or WDQ for the common forms (`src/wdq.rs` translates them).
 
+The apps' files in `public/` are built into the binary (`src/web/apps.rs`).
 Anything else is a static file from the PHP checkout's `public_html`, if its
 type is on an allowlist (`src/web/static_files.rs`); retired pages redirect or
 answer 410 (`src/web/legacy.rs`).
@@ -91,6 +94,7 @@ only accepted from pages of this site.
 ## Code
 
 - `src/tools/`: one module per tool; `templates/tools/` their pages.
+- `public/`: the apps' HTML, JavaScript and CSS (their APIs are in `src/tools/`).
 - `src/jobs/`: background jobs.
 - `src/web/`: routing, errors, parameters, static files. `templates/base.html`
   and `assets/style.css` give all pages one look.

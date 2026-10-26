@@ -1,0 +1,119 @@
+<style>
+div.movie-description {
+    margin: 0.5rem;
+}
+</style>
+
+<template id='movie-template'>
+<div class='container-fluid'>
+    <page-header></page-header>
+    <div class="row" style="width:100%;">
+        <div v-if='loading'>
+            <i tt='loading'></i>
+        </div>
+        <div v-else style="width: 100%">
+            <div style="display:flex;">
+                <div style="margin-right:1rem;">
+                    <commons-thumbnail v-if='item.hasClaims("P3383")' :filename='item.getFirstStringForProperty("P3383")' width='260' height='400'></commons-thumbnail>
+                    <commons-thumbnail v-else-if='item.hasClaims("P18")' :filename='item.getFirstStringForProperty("P18")' width='260' height='400'></commons-thumbnail>
+                </div>
+                <div>
+                    <div style="display:flex; margin-bottom: 0.5rem;">
+                        <div v-if='item.hasClaims("P154")' style="background-color:white;">
+                            <commons-thumbnail :filename='item.getFirstStringForProperty("P154")' width='300' height="65" nolink="1"></commons-thumbnail>
+                        </div>
+                        <div v-else>
+                            <h1>{{item.getLabel()}}</h1>
+                        </div>
+                        <div style="margin-left:1rem;">
+                            <a :href='item.getURL()' class='wikidata' target="_blank">
+                                <img border='0' src='https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Wikidata-logo_S.svg/32px-Wikidata-logo_S.svg.png' />
+                            </a>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 0.5rem;">
+                        {{movie.minutes}} min
+                    </div>
+                    <div style="display:flex; margin-bottom: 0.5rem;">
+                        <div v-for="v in movie.video_files" style="margin-right:1rem;">
+                            <router-link type="button" class="btn btn-outline-light btn-lg" :to="'/play/'+v.property+'/'+v.key" :title="v.key" style="height:54px;">
+                                ▶ <span v-if='v.is_trailer' tt="play_trailer"></span>
+                                <span v-else tt="play"></span>
+                                <img v-if='v.property==10' src='https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Commons-logo.svg/24px-Commons-logo.svg.png' />
+                                <img v-if='v.property==724' src='https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Internet_Archive_Logo.svg/32px-Internet_Archive_Logo.svg.png' />
+                                <img v-if='v.property==1651' src='https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/32px-YouTube_full-color_icon_%282017%29.svg.png' />
+                            </router-link>
+                        </div>
+                    </div>
+                    <div v-if='item.hasClaims("P57")' style="display:flex; margin-bottom: 0.5rem;">
+                        <span tt='director'></span>
+                        <span v-for='q in item.getTargets("P57")' style='margin-left: 0.5rem;'>
+                            <router-link :to='"/person/"+q.replace(/\D/g,"")'>
+                                <wd-link :item='q' as_text='1'></wd-link>
+                            </router-link>
+                        </span>
+                    </div>
+                    <div v-if='description!=""' class="movie-description">
+                        {{description}}
+                    </div>
+                </div>
+            </div>
+            <div v-if='cast.length>0' style="clear:both; margin-bottom: 0.5rem; margin-top: 0.5rem; width: 100%;">
+                <h2 tt='cast'></h2>
+                <div style="display:flex; flex-wrap: wrap;">
+                    <person-thumb v-for="cm in cast" :person='cm'></person-thumb>
+                </div>
+            </div>
+            <div style="width: 100%;">
+                <section-row v-for='section in movie.sections' :section="section"></section-row>
+            </div>
+        </div>
+    </div>
+
+</div>
+</template>
+
+<script>
+'use strict';
+
+let MoviePage = Vue.extend ( {
+    props : ['q'] ,
+    mixins : [wikipediaDescriptionMixin],
+    data : function () { return { loading:true,item:{},movie:{},cast:[],description:'' } } ,
+    created : function () {
+        let self = this;
+        let movie_q = 'Q'+self.q;
+        fetch("./api.php?action=get_movie&q="+self.q)
+        .then(results => {
+            results.json().then( j => {
+                self.movie=j.data;
+                wd.getItemBatch([movie_q],function(){
+                    self.item = wd.getItem(movie_q);
+                    self.load_description(movie_q,'en',function(desc){
+                        if ( typeof desc!='undefined' && desc!='' ) self.description = desc;
+                    });
+                    self.item.getClaimsForProperty("P161").forEach( (c) => {
+                        let person_q = self.item.getClaimTargetItemID(c);
+                        if ( typeof self.movie.people.P161!='undefined' ) {
+                            if ( typeof self.movie.people.P161[person_q]!='undefined' ) {
+                                let cm = JSON.parse(JSON.stringify(self.movie.people.P161[person_q]));
+                                $.each ( (c.qualifiers||[]) , function ( qp , qv ) {
+                                    // TODO character role
+                                    if ( qp=='P4633') cm.as = qv[0].datavalue.value;
+                                });
+                                self.cast.push(cm);
+                            }
+                        }
+                    });
+                    self.loading = false;
+                })
+            });
+        })
+    } ,
+    updated : function () { tt.updateInterface(this.$el) ; } ,
+    mounted : function () { tt.updateInterface(this.$el) ; } ,
+    methods : {
+    } ,
+    template:'#movie-template'
+} ) ;
+</script>

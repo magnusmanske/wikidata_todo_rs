@@ -1,0 +1,54 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<meta name="robots" content="NOINDEX, NOFOLLOW">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title tt="toolname"></title>
+
+<link rel="stylesheet" href="https://tools-static.wmflabs.org/cdnjs/ajax/libs/bootstrap/5.3.8/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://tools-static.wmflabs.org/cdnjs/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="https://tools-static.wmflabs.org/magnustools/resources/html/wikimedia.css">
+<link rel="stylesheet" href="../resources/vue_es6/styles.css">
+<link rel="stylesheet" href="./styles.css">
+
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/bootstrap/5.3.8/js/bootstrap.bundle.min.js"></script>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/vue/2.7.16/vue.min.js"></script>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/vue-router/3.6.5/vue-router.min.js"></script>
+<script src="https://tools-static.wmflabs.org/magnustools/resources/js/flot/jquery.flot.min.js"></script>
+</head>
+
+<body>
+    <div id="app" v-cloak>
+        <tool-navbar>
+            <template slot="left">
+                <li class="nav-item">
+                    <a class="btn btn-outline-secondary" target="_blank"
+                        href="https://bitbucket.org/magnusmanske/wikidata-todo/src/master/public_html/duplicity/" tt="git"></a>
+                </li>
+                <li class="nav-item">
+                    <a class="btn btn-outline-info" target="_blank"
+                        href="https://www.wikidata.org/wiki/Wikidata:Duplicity" tt="help"></a>
+                </li>
+            </template>
+            <template slot="right"><widar></widar></template>
+        </tool-navbar>
+
+        <router-view :key="$route.path"><i tt="loading"></i></router-view>
+
+        <div class="duplicity-error-toast-container" aria-live="polite" aria-atomic="true">
+            <div v-for="(err, idx) in errors" :key="idx"
+                class="toast show align-items-center text-bg-danger border-0 duplicity-error-toast" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">{{err}}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                        aria-label="Close" @click.prevent="dismissError(idx)"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+</body>
+</html>
