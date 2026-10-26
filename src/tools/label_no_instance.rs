@@ -1,7 +1,7 @@
 //! `label_no_instance.php`: items with a label matching a `LIKE` pattern,
 //! but neither "instance of" (P31) nor "subclass of" (P279).
 
-use crate::replicas::{linktarget_ids, placeholders, select_in};
+use crate::replicas::{linktarget_ids, titles_linking_to};
 use crate::state::AppState;
 use crate::terms::{self, TermType};
 use crate::web::{AppError, Params, render};
@@ -12,7 +12,6 @@ use axum::response::Html;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use wikimisc::mysql_async::Value;
 
 /// Matching labels looked at, at most.
 const MAX_CANDIDATES: usize = 20_000;
@@ -56,7 +55,8 @@ pub async fn handler(
         }
         None => None,
     };
-    let page = Page { title: "Labels without “instance of”", lang, pattern, results, max_candidates: MAX_CANDIDATES };
+    let page =
+        Page { title: "Labels without “instance of”", lang, pattern, results, max_candidates: MAX_CANDIDATES };
     render(&page)
 }
 
@@ -87,17 +87,7 @@ async fn search(state: &AppState, lang: &str, pattern: &str) -> Result<Results, 
 async fn classified(state: &AppState, items: &[String]) -> anyhow::Result<HashSet<String>> {
     let mut conn = state.replicas.conn(&Wiki::wikidata(), &["page", "pagelinks", "linktarget"]).await?;
     let targets = linktarget_ids(&mut conn, NS_PROPERTY, &["P31", "P279"]).await?;
-    if targets.is_empty() {
-        return Ok(HashSet::new());
-    }
-    let sql = format!(
-        "SELECT DISTINCT page_title FROM page JOIN pagelinks ON pl_from=page_id
-         WHERE pl_target_id IN ({}) AND page_namespace=0 AND page_title IN",
-        placeholders(targets.len())
-    );
-    let params: Vec<Value> = targets.into_iter().map(Value::from).collect();
-    let rows: Vec<String> = select_in(&mut conn, &sql, "", &params, items).await?;
-    Ok(rows.into_iter().collect())
+    titles_linking_to(&mut conn, items, &targets).await
 }
 
 #[cfg(test)]

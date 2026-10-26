@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Potential duplicate items: items whose only sitelink is to one wiki, and other items with that page title as label or alias.</p>
+<form method="get" action="/dupe_finder/">
+  <div class="row">
+    <label>Site <span class="hint">database name, e.g. <code>enwiki</code></span>
+      <input type="text" name="site" value="{{ request.site }}" required>
+    </label>
+    <label>Candidates per run <span class="hint">at most {{ max_limit }}</span>
+      <input type="number" name="limit" value="{{ limit }}" min="1" max="{{ max_limit }}">
+    </label>
+  </div>
+  <label>Instance of <span class="hint">optional; only candidates of these types, e.g. <code>Q7725634,Q3331189</code></span>
+    <input type="text" name="instance_of" value="{{ request.instance_of }}">
+  </label>
+  <label>Start after <span class="hint">optional; page title</span>
+    <input type="text" name="from" value="{{ request.from }}">
+  </label>
+  <button name="run" value="1">Find duplicates</button>
+</form>
+<p class="hint">Disambiguation pages, categories, templates and lists are left out. Results appear as they are found.</p>
+{% if running %}
+<h2>Potential duplicates</h2>
+<!-- results -->
+{% endif %}
+{% endblock %}
