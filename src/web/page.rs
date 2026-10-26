@@ -23,7 +23,14 @@ pub fn render(template: &impl Template) -> Result<Html<String>, AppError> {
 /// `value` as JSON, or as JSONP if there is a callback. Callers of the old
 /// tools use jQuery-style names (`jQuery123_456`) and dotted paths.
 pub fn jsonp<T: Serialize>(value: T, callback: Option<String>) -> Jsonp<T> {
-    Jsonp::new(value, callback).rules(CallbackRules { allow_dotted: true, max_len: 128 })
+    Jsonp::new(value, callback).rules(CALLBACK_RULES)
+}
+
+const CALLBACK_RULES: CallbackRules = CallbackRules { allow_dotted: true, max_len: 128 };
+
+/// Whether `callback` is a JSONP callback name [`jsonp`] accepts, for answers made otherwise.
+pub fn is_valid_callback(callback: &str) -> bool {
+    wikimisc::server::jsonp::is_valid_callback(callback, CALLBACK_RULES)
 }
 
 /// A public, read-only API answer: [`jsonp`], usable from any site.
