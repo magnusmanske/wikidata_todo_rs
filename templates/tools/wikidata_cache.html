@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="lead">Items that have all of some external-ID properties, from this tool's cache of Wikidata's external IDs.</p>
+<form method="get" action="/wikidata_cache/">
+  <label>Properties <span class="hint">one property ID (e.g. P214) per line</span>
+    <textarea name="all_properties" rows="3" required>{{ all_properties }}</textarea>
+  </label>
+  <fieldset>
+    <legend>Format</legend>
+    <div class="row">
+      <label class="check"><input type="radio" name="format" value="html" checked> Page</label>
+      <label class="check"><input type="radio" name="format" value="beacon"> BEACON</label>
+      <label class="check"><input type="radio" name="format" value="json"> JSON</label>
+      <label class="check"><input type="radio" name="format" value="json_verbose"> JSON (SPARQL results)</label>
+    </div>
+  </fieldset>
+  <label>BEACON target property <span class="hint">optional: link each item to its value of this property</span>
+    <input type="text" name="beacon_target_prop" value="{{ beacon_target_prop }}" placeholder="P214">
+  </label>
+  <button name="action" value="items_with_properties">Find items</button>
+</form>
+<p><a href="/wikidata_cache/?action=stats">Statistics of the cache</a></p>
+
+{% if let Some(stats) = stats %}
+<h2>Statistics</h2>
+<div class="table-wrap">
+<table>
+  <tbody>
+  {% for (label, value) in stats %}<tr><th>{{ label }}</th><td class="num">{{ value }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{% if let Some(result) = result %}
+<h2>{{ result.description }}</h2>
+<p>{{ result.total }} items{% if result.capped %}, the first {{ result.items.len() }} of them here{% endif %}.
+All of them as <a href="/wikidata_cache/?{{ result.query }}&amp;format=beacon">BEACON</a>,
+<a href="/wikidata_cache/?{{ result.query }}&amp;format=json">JSON</a> or
+<a href="/wikidata_cache/?{{ result.query }}&amp;format=json_verbose">JSON (SPARQL results)</a>.</p>
+<ul class="columns">
+{% for item in result.items %}<li><a href="https://www.wikidata.org/wiki/Q{{ item }}">Q{{ item }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}
