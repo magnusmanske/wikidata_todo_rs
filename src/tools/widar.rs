@@ -474,7 +474,7 @@ fn local_path(path: &str) -> String {
 }
 
 /// A redirect that cannot fail on odd characters (axum's would panic).
-fn redirect(location: &str) -> Response {
+pub fn redirect(location: &str) -> Response {
     let location = HeaderValue::from_str(location).unwrap_or(HeaderValue::from_static("/"));
     (StatusCode::FOUND, [(header::LOCATION, location)]).into_response()
 }
