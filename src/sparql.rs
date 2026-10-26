@@ -21,6 +21,8 @@ const MAX_JSON_BYTES: usize = 512 * 1024 * 1024;
 #[derive(Debug, Clone)]
 pub struct Sparql {
     client: SparqlClient,
+    /// For heavy queries of the jobs, which WDQS cannot finish in time.
+    qlever: SparqlClient,
 }
 
 impl Sparql {
@@ -28,10 +30,11 @@ impl Sparql {
         // The shared client's timeout is too short for slow queries.
         let http =
             reqwest::Client::builder().user_agent(crate::state::USER_AGENT).timeout(TIMEOUT).build().unwrap_or(http);
-        let client = SparqlClient::with_client(SparqlEndpoint::wdqs(), http)
+        let client = SparqlClient::with_client(SparqlEndpoint::wdqs(), http.clone())
             .with_retries(2)
             .with_max_response_bytes(MAX_JSON_BYTES);
-        Ok(Self { client })
+        let qlever = SparqlClient::with_client(SparqlEndpoint::qlever_wikidata(), http).with_retries(1);
+        Ok(Self { client, qlever })
     }
 
     /// The query's result, as WDQS's JSON.
@@ -42,6 +45,18 @@ impl Sparql {
     /// The result as CSV, buffered in a temporary file: for large results.
     pub async fn csv(&self, query: &str) -> Result<csv::Reader<File>> {
         self.client.query_csv(&tagged(query)).await.context("SPARQL query failed")
+    }
+
+    /// As [`Self::csv`], but if WDQS fails (mostly: times out), from QLever,
+    /// whose data may be a little older. For jobs; the query must suit both.
+    pub async fn heavy_csv(&self, query: &str) -> Result<csv::Reader<File>> {
+        match self.client.query_csv(&tagged(query)).await {
+            Ok(reader) => Ok(reader),
+            Err(e) => {
+                tracing::info!("WDQS failed ({e}), trying QLever");
+                self.qlever.query_csv(query).await.context("SPARQL query failed on WDQS and QLever")
+            }
+        }
     }
 
     /// The entity IDs (`Q42`, `P31`, `L1`, …) in variable `var` of the
