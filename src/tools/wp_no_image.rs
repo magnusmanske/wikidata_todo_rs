@@ -82,7 +82,8 @@ mod tests {
         std::fs::write(dir.path().join("secretwiki.html"), "").unwrap();
         let done = get(dir.path(), "/wp_no_image/api.php?wiki=cawiki&page=Barcelona%0Aevil").await;
         assert_eq!(done.body, r#"{"status":"OK"}"#);
-        get(dir.path(), "/wp_no_image/api.php?wiki=cawiki&page=Girona").await;
+        let second = get(dir.path(), "/wp_no_image/api.php?wiki=cawiki&page=Girona").await;
+        assert_eq!((second.status.as_u16(), second.body.as_str()), (200, r#"{"status":"OK"}"#));
         assert_eq!(std::fs::read_to_string(lists.join("cawiki.has_image")).unwrap(), "Barcelonaevil\nGirona\n");
         for wiki in ["dewiki", "../secretwiki", "x/cawiki", "wiki"] {
             let refused = get(dir.path(), &format!("/wp_no_image/api.php?wiki={wiki}&page=A")).await;

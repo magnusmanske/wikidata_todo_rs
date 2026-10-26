@@ -21,8 +21,10 @@ pub async fn line_once(path: &Path, line: &str) -> Result<()> {
         bail!("{} is full", path.display());
     }
     let mut file = tokio::fs::OpenOptions::new().create(true).append(true).open(path).await?;
-    // One write per line, so that concurrent appends do not interleave.
+    // One write per line, so that concurrent appends do not interleave;
+    // flushed, as tokio only hands the write to a background thread.
     file.write_all(format!("{line}\n").as_bytes()).await?;
+    file.flush().await?;
     Ok(())
 }
 
