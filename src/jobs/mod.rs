@@ -5,6 +5,7 @@ mod duplicity;
 mod merge_by_id;
 mod noitems;
 mod pasleim;
+mod specieswiki;
 mod user_scripts;
 
 use crate::state::AppState;
@@ -52,6 +53,14 @@ pub enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Wikispecies pages without an item: links or creates one (daily).
+    /// A dry run reads, but neither edits Wikidata nor writes to the database.
+    Specieswiki {
+        #[arg(long)]
+        dry_run: bool,
+        /// Only these pages, instead of all that Duplicity lists.
+        titles: Vec<String>,
+    },
 }
 
 pub async fn run(command: Command, state: &AppState) -> Result<()> {
@@ -66,6 +75,7 @@ pub async fn run(command: Command, state: &AppState) -> Result<()> {
         Command::PasleimUpdate { dry_run } => pasleim::update(state, Writes { dry_run }).await,
         Command::NoitemsUpdate { dry_run } => noitems::update(state, Writes { dry_run }).await,
         Command::UserScriptsUpdate { dry_run } => user_scripts::update(state, Writes { dry_run }).await,
+        Command::Specieswiki { dry_run, titles } => specieswiki::run(state, &titles, Writes { dry_run }).await,
     }
 }
 

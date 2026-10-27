@@ -126,7 +126,7 @@ async fn update_wiki(state: &AppState, wiki: &Wiki, writes: Writes) -> Result<us
 }
 
 /// Removes `no_wd` rows, with their candidates.
-async fn forget(tool: &mut Conn, ids: &[u64], writes: Writes) -> Result<()> {
+pub(super) async fn forget(tool: &mut Conn, ids: &[u64], writes: Writes) -> Result<()> {
     for chunk in ids.chunks(WRITE_CHUNK) {
         let list = placeholders(chunk.len());
         writes.exec(tool, &format!("DELETE FROM candidates WHERE no_wd_id IN ({list})"), chunk.to_vec()).await?;

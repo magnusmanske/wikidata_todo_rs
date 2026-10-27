@@ -36,6 +36,9 @@ pub struct Config {
     /// editing as the user; without the file, logging in is unavailable.
     #[serde(default = "default_oauth")]
     pub oauth: PathBuf,
+    /// The Wikispecies bot's Wikidata login: `user=` and (bot) `password=` lines.
+    #[serde(default = "default_bot_credentials")]
+    pub bot_credentials: PathBuf,
     /// Service dashboard push; the token may also come from `$DASHBOARD_TOKEN`.
     #[serde(default)]
     pub telemetry: TelemetryConfig,
@@ -53,6 +56,10 @@ fn default_oauth() -> PathBuf {
     "oauth.ini".into()
 }
 
+fn default_bot_credentials() -> PathBuf {
+    "reinheitsgebot.conf".into()
+}
+
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let text =
@@ -64,6 +71,7 @@ impl Config {
         config.data_dir = dir.join(&config.data_dir);
         config.replica_credentials = dir.join(&config.replica_credentials);
         config.oauth = dir.join(&config.oauth);
+        config.bot_credentials = dir.join(&config.bot_credentials);
         Ok(config)
     }
 }

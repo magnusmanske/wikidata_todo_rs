@@ -5,5 +5,6 @@
   "replica_credentials": "replica.my.cnf",
   "cookie_key": "<128 hex digits: openssl rand -hex 64>",
   "oauth": "oauth.ini",
+  "bot_credentials": "reinheitsgebot.conf",
   "telemetry": { "token": "<dashboard token; or set $DASHBOARD_TOKEN>" }
 }

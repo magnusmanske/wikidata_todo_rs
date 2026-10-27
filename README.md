@@ -10,8 +10,7 @@ This replaces the PHP version ([wikidata-todo](https://codeberg.org/magnusmanske
 The apps with their own (Vue) interface now live here, in `public/`: Duplicity,
 Relator, Relator2, Graveyard shift and Papertrail. The PHP checkout
 stays in use for the other static files in `public_html` (pages, scripts, data;
-served from there by this service), the shared `resources/`, and the
-Wikispecies bot.
+served from there by this service) and the shared `resources/`.
 
 ## Tools
 
@@ -134,6 +133,17 @@ set `"tool_db_owner": "s51211"` to use them (read-only).
 
 The same binary runs the background jobs (`wikidata_todo_rs --help` lists
 them; each has `--dry-run`), and `jobs.yaml` schedules them on Toolforge.
+
+`specieswiki`, the Wikispecies bot, gives Wikispecies pages that Duplicity
+lists an item: it links a matching item, or creates one, as the bot whose
+login is in `bot_credentials` (`user=`, `password=`). It reads taxa from the
+Taxonavigation (rank, parent, extinct), publications, journals and
+disambiguation pages from the HTML, and people and serials (ISSN) from the
+wikitext. Matches must be unique: by taxon name (and parent, for homonyms),
+IPNI, BPH, ISSN, botanical author abbreviation, or a person's name and
+years; anything ambiguous is left alone. New statements cite the page
+revision. `wikidata_todo_rs specieswiki --dry-run "Some page"` shows what
+it would do for one page.
 
 ## Deploy
 
