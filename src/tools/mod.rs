@@ -32,7 +32,6 @@ mod index;
 mod label_no_instance;
 mod last_changed_items;
 mod linked_items;
-mod logger;
 mod merge_candidates_by_shared_identifier;
 mod missing_wp_animal_audio;
 mod multibeacon;
@@ -69,8 +68,10 @@ mod wp_no_image;
 use crate::state::AppState;
 use crate::web::moved;
 use axum::Router;
-use axum::extract::{Request, State as Extract};
+use axum::extract::Request;
+use axum::http::Method;
 use axum::middleware::{self, Next};
+use axum::response::Response;
 use axum::routing::{MethodRouter, get};
 use std::sync::Arc;
 
@@ -124,10 +125,10 @@ pub const MENU: &[(&str, &str)] = &[
 const ALSO_AT_OLD_ADDRESS: &[&str] =
     &["get_item_names", "pagepile2kml", "related_properties", "resolver", "sparql_rc", "user_edits"];
 
-pub fn routes(state: &State) -> Router<State> {
+pub fn routes() -> Router<State> {
     let router = Router::new().route("/", get(index::handler)).route("/index.php", get(index::handler));
     let router = pages().into_iter().fold(router, |router, (name, handler)| {
-        let handler = counted(state, name, handler);
+        let handler = counted(name, handler);
         let path = format!("/{name}/");
         let router = router.route(&path, handler.clone()).route(&format!("/{name}"), moved(&path));
         match ALSO_AT_OLD_ADDRESS.contains(&name) {
@@ -135,30 +136,28 @@ pub fn routes(state: &State) -> Router<State> {
             false => router.route(&format!("/{name}.php"), moved(&path)),
         }
     });
-    apis().into_iter().fold(router, |router, (path, name, handler)| router.route(path, counted(state, name, handler)))
+    apis().into_iter().fold(router, |router, (path, name, handler)| router.route(path, counted(name, handler)))
 }
 
-/// Counts the uses of a tool (see [`logger`]), and its requests for the service dashboard.
-fn counted(state: &State, name: &'static str, handler: MethodRouter<State>) -> MethodRouter<State> {
-    handler
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            move |Extract(state): Extract<State>, request: Request, next: Next| {
-                logger::count_uses(state, name, request, next)
-            },
-        ))
-        .layer(middleware::from_fn(move |request: Request, next: Next| async move {
-            let response = next.run(request).await;
-            record_tool_request(name, response.status().as_u16());
-            response
-        }))
+/// Counts each request to a tool for the service dashboard, by status
+/// class (`2xx`, …; `http_requests_total` has them for the whole service);
+/// and those that bring parameters and succeed as uses (`tool_uses_total`).
+/// The dashboard's maintenance in magnustools copies the uses into its usage
+/// log once a day (tool `wikidata-todo`, the tool's name as method).
+fn counted(name: &'static str, handler: MethodRouter<State>) -> MethodRouter<State> {
+    handler.layer(middleware::from_fn(move |request: Request, next: Next| count(name, request, next)))
 }
 
-/// Requests per tool and status class (`2xx`, …), for the service dashboard;
-/// `http_requests_total` has them for the whole service.
-fn record_tool_request(tool: &'static str, status: u16) {
-    let status = format!("{}xx", status / 100);
-    wikimisc::metrics::counter!("tool_requests_total", "tool" => tool, "status" => status).increment(1);
+async fn count(tool: &'static str, request: Request, next: Next) -> Response {
+    let with_parameters = request.method() == Method::POST || request.uri().query().is_some_and(|q| !q.is_empty());
+    let response = next.run(request).await;
+    let status = response.status().as_u16();
+    wikimisc::metrics::counter!("tool_requests_total", "tool" => tool, "status" => format!("{}xx", status / 100))
+        .increment(1);
+    if with_parameters && status < 400 {
+        wikimisc::metrics::counter!("tool_uses_total", "tool" => tool).increment(1);
+    }
+    response
 }
 
 /// Both methods: the PHP tools read `$_REQUEST`, so their forms and callers use either.

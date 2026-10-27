@@ -83,8 +83,10 @@ Anything else is a static file from the PHP checkout's `public_html`, if its
 type is on an allowlist (`src/web/static_files.rs`); retired pages redirect or
 answer 410 (`src/web/legacy.rs`).
 
-Uses of the tools are counted per day in the usage log of magnustools
-(tool `wikidata-todo`, the tool's name as method).
+Uses of the tools (requests with parameters that succeed) are counted in the
+telemetry (`tool_uses_total`, with `tool_requests_total` for all requests);
+magnustools' dashboard maintenance copies the uses into its usage log once a
+day (tool `wikidata-todo`, the tool's name as method).
 
 ## Editing (Widar)
 
