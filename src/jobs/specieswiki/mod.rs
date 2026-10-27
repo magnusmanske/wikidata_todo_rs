@@ -248,7 +248,8 @@ impl Bot<'_> {
     }
 
     async fn person(&mut self, page: &Page, person: Person) -> Result<Option<ItemId>> {
-        let name = page.title.as_str();
+        // Without a disambiguation: `Yu-Fan Wang (botanist)`.
+        let name = page.title.split(" (").next().unwrap_or_default();
         let initial_first = INITIAL_FIRST.as_ref().is_some_and(|r| r.is_match(name));
         if initial_first || name.contains('/') || !name.contains(' ') {
             return skipped(page, "not a full name");

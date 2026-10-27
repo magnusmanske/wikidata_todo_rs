@@ -13,6 +13,8 @@ const RANKS: &[(&str, &str)] = &[
     ("spacies", "Q7432"),
     ("speies", "Q7432"),
     ("spcies", "Q7432"),
+    ("speciers", "Q7432"),
+    ("speecies", "Q7432"),
     ("genus", "Q34740"),
     ("genu", "Q34740"),
     ("genera", "Q34740"),
@@ -37,6 +39,7 @@ const RANKS: &[(&str, &str)] = &[
     ("domain", "Q146481"),
     ("tribe", "Q227936"),
     ("tribus", "Q227936"),
+    ("tribes", "Q227936"),
     ("form", "Q5469884"),
     ("formae", "Q279749"),
     ("formas", "Q279749"),
@@ -91,6 +94,7 @@ const RANKS: &[(&str, &str)] = &[
     ("superorder", "Q5868144"),
     ("superordo", "Q5868144"),
     ("subsection", "Q10861375"),
+    ("subsections", "Q10861375"),
     ("subsectione", "Q5998839"),
     ("subsectio", "Q5998839"),
     ("nothogenus", "Q6045742"),
@@ -120,7 +124,8 @@ const RANKS: &[(&str, &str)] = &[
 ];
 
 /// Ranks whose botanical item differs from the zoological one in [`RANKS`].
-const BOTANICAL: &[(&str, &str)] = &[("form", "Q279749"), ("section", "Q3181348"), ("subsection", "Q5998839")];
+const BOTANICAL: &[(&str, &str)] =
+    &[("form", "Q279749"), ("section", "Q3181348"), ("subsection", "Q5998839"), ("subsections", "Q5998839")];
 
 /// The item of a rank (any case); in the botanical sense for plants, fungi and algae.
 pub fn rank_item(rank: &str, botanical: bool) -> Option<&'static str> {
