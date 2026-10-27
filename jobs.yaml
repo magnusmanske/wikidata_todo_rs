@@ -46,10 +46,3 @@
   schedule: "7 16 * * *"
   mount: all
   emails: onfailure
-- name: process-specieswiki
-  command: /data/project/wikidata-todo/scripts/duplicity_bot/process_specieswiki.php
-  image: php8.4
-  schedule: "7 17 * * *"
-  mem: 2Gi
-  mount: all
-  emails: onfailure
