@@ -20,6 +20,7 @@ use std::sync::LazyLock;
 use wikidata::{NewItem, SITE, Wikidata};
 use wikimisc::date::Date;
 use wikimisc::entity_id::{ItemId, PropertyId};
+use wikimisc::http::HttpRetryPolicy;
 use wikimisc::mysql_async::Conn;
 use wikimisc::mysql_async::prelude::Queryable;
 use wikimisc::statements::{external_id_snak, imported_from_revision, item_snak, statement, string_snak, time_snak};
@@ -32,6 +33,8 @@ const HOST: &str = "species.wikimedia.org";
 const SUMMARY: &str = "Item for a Wikispecies page";
 /// How many missing ancestors of a taxon get an item too.
 const MAX_PARENTS: usize = 5;
+/// For page requests that hit a rate limit or a server error.
+const RETRIES: u32 = 5;
 /// Pages whose items are looked up at once.
 const BATCH: usize = 50;
 
@@ -343,8 +346,17 @@ fn skipped(page: &Page, reason: &str) -> Result<Option<ItemId>> {
 /// The page's HTML and wikitext; `None` if there is no such page.
 async fn fetch(http: &reqwest::Client, title: &str) -> Result<Option<Page>> {
     let wiki = Wiki::from_dbname(SITE)?;
-    let params = [("action", "parse"), ("page", title), ("prop", "text|wikitext|revid"), ("redirects", "1")];
-    let json = crate::mediawiki::api_patiently(http, &wiki, &params).await?;
+    let params = [
+        ("action", "parse"),
+        ("page", title),
+        ("prop", "text|wikitext|revid"),
+        ("redirects", "1"),
+        ("format", "json"),
+        ("formatversion", "2"),
+    ];
+    // Parsing is costly, and the wiki limits it: wait as long as it asks.
+    let request = http.get(wiki.api_url()).query(&params);
+    let json: Value = HttpRetryPolicy::new(RETRIES).with_jitter().fetch_json(request).await?;
     if json["error"]["code"] == "missingtitle" {
         return Ok(None);
     }
