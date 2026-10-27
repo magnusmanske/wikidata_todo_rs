@@ -138,14 +138,27 @@ pub fn routes(state: &State) -> Router<State> {
     apis().into_iter().fold(router, |router, (path, name, handler)| router.route(path, counted(state, name, handler)))
 }
 
-/// Counts the uses of a tool (see [`logger`]).
+/// Counts the uses of a tool (see [`logger`]), and its requests for the service dashboard.
 fn counted(state: &State, name: &'static str, handler: MethodRouter<State>) -> MethodRouter<State> {
-    handler.layer(middleware::from_fn_with_state(
-        state.clone(),
-        move |Extract(state): Extract<State>, request: Request, next: Next| {
-            logger::count_uses(state, name, request, next)
-        },
-    ))
+    handler
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            move |Extract(state): Extract<State>, request: Request, next: Next| {
+                logger::count_uses(state, name, request, next)
+            },
+        ))
+        .layer(middleware::from_fn(move |request: Request, next: Next| async move {
+            let response = next.run(request).await;
+            record_tool_request(name, response.status().as_u16());
+            response
+        }))
+}
+
+/// Requests per tool and status class (`2xx`, …), for the service dashboard;
+/// `http_requests_total` has them for the whole service.
+fn record_tool_request(tool: &'static str, status: u16) {
+    let status = format!("{}xx", status / 100);
+    wikimisc::metrics::counter!("tool_requests_total", "tool" => tool, "status" => status).increment(1);
 }
 
 /// Both methods: the PHP tools read `$_REQUEST`, so their forms and callers use either.
