@@ -41,7 +41,7 @@
 # The Wikispecies bot. The Rust one only says what it would do (see its log),
 # an hour before the PHP one acts. To switch: drop `--dry-run` here, and the PHP job.
 - name: specieswiki
-  command: job specieswiki --dry-run
+  command: job specieswiki
   image: tool-wikidata-todo/tool-wikidata-todo:latest
   schedule: "7 16 * * *"
   mount: all
