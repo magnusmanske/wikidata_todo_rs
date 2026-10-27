@@ -3,20 +3,24 @@
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use wikimisc::entity_id::{EntityId, ItemId};
+use wikimisc::entity_id::{EntityId, ItemId, PropertyId};
 use wikimisc::mediawiki::api::Api;
 use wikimisc::retry::RetryPolicy;
 use wikimisc::wikibase::{EntityTrait, ItemEntity, LocaleString, SiteLink, Statement};
-use wikimisc::wikidata::WikidataError;
+use wikimisc::wikidata::{CirrusQuery, WikidataError};
 
 pub const SITE: &str = "specieswiki";
 /// Search hits to look at: enough to tell one from several, and to find a
 /// person among namesakes.
-const SEARCH_LIMIT: usize = 20;
+const SEARCH_LIMIT: usize = 50;
 /// Between edits, as the bot policy asks.
 const EDIT_DELAY_MS: u64 = 2000;
+/// Publications of a person to look up.
+const MAX_DOIS: usize = 20;
+const DOI: PropertyId = PropertyId::new(356);
+const MAX_AUTHORS: usize = 50;
 /// For reads that hit a rate limit or a server error.
 const RETRIES: u32 = 4;
 
@@ -24,7 +28,14 @@ pub struct Wikidata {
     client: wikimisc::wikidata::Wikidata,
     /// Logged in as the bot; `None` in a dry run.
     api: Option<Api>,
-    searches: HashMap<String, Vec<ItemId>>,
+    searches: HashMap<String, Hits>,
+}
+
+#[derive(Clone)]
+struct Hits {
+    items: Vec<ItemId>,
+    /// Whether these are all there are.
+    complete: bool,
 }
 
 /// A new item for a Wikispecies page.
@@ -62,14 +73,44 @@ impl Wikidata {
         Ok(self.items_for_pages(&[page]).await?.into_values().next())
     }
 
-    /// The items a search finds, best match first; remembered until an item is created.
+    /// The items a search finds, best match first.
     pub async fn search(&mut self, query: &str) -> Result<Vec<ItemId>> {
-        if let Some(items) = self.searches.get(query) {
-            return Ok(items.clone());
+        Ok(self.hits(query).await?.items)
+    }
+
+    /// All items a search finds; `None` if there are too many to look at.
+    pub async fn search_all(&mut self, query: &str) -> Result<Option<Vec<ItemId>>> {
+        let hits = self.hits(query).await?;
+        Ok(hits.complete.then_some(hits.items))
+    }
+
+    /// Remembered until an item is created.
+    async fn hits(&mut self, query: &str) -> Result<Hits> {
+        if let Some(hits) = self.searches.get(query) {
+            return Ok(hits.clone());
         }
-        let items = patiently(|| self.client.search_items(query, SEARCH_LIMIT)).await?;
-        self.searches.insert(query.to_string(), items.clone());
-        Ok(items)
+        let results = patiently(|| self.client.search(query, 0, SEARCH_LIMIT)).await?;
+        let items = results.ids.iter().filter_map(|id| id.as_item()).collect();
+        let hits = Hits { items, complete: results.total_hits <= SEARCH_LIMIT as u64 };
+        self.searches.insert(query.to_string(), hits.clone());
+        Ok(hits)
+    }
+
+    /// The authors (P50) of the works with these DOIs; but for works with
+    /// more authors than anyone could check.
+    pub async fn authors(&mut self, dois: &[String]) -> Result<Vec<ItemId>> {
+        let mut works = vec![];
+        for doi in dois.iter().take(MAX_DOIS) {
+            works.extend(self.search(&CirrusQuery::new("").has_statement(DOI, doi).to_string()).await?);
+        }
+        if works.is_empty() {
+            return Ok(vec![]);
+        }
+        let works = self.items(&works, &["claims"]).await?;
+        let authors = works.iter().map(|work| crate::wikidata::item_values(work, "P50"));
+        let authors: HashSet<ItemId> =
+            authors.filter(|a| a.len() <= MAX_AUTHORS).flatten().filter_map(|id| id.parse().ok()).collect();
+        Ok(authors.into_iter().collect())
     }
 
     /// The items, as JSON, with only `props` (`claims|sitelinks`).
@@ -123,6 +164,7 @@ where
         WikidataError::Http(e) => {
             e.is_timeout() || e.is_connect() || e.status().is_some_and(|s| s.as_u16() == 429 || s.is_server_error())
         }
+        WikidataError::Api { code, .. } => code == "cirrussearch-too-busy-error",
         _ => false,
     };
     RetryPolicy::new(RETRIES).with_jitter().run_if("Wikidata API", transient, op).await

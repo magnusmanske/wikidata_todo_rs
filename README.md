@@ -140,8 +140,11 @@ login is in `bot_credentials` (`user=`, `password=`). It reads taxa from the
 Taxonavigation (rank, parent, extinct), publications, journals and
 disambiguation pages from the HTML, and people and serials (ISSN) from the
 wikitext. Matches must be unique: by taxon name (and parent, for homonyms),
-IPNI, BPH, ISSN, botanical author abbreviation, or a person's name and
-years; anything ambiguous is left alone. New statements cite the page
+IPNI, BPH, ISSN; anything ambiguous is left alone. A person is matched by
+botanical author abbreviation, or as the one author (P50) with their name of
+the publications (DOIs) their page lists, or by name and years of birth and
+death; they get a new item only if nobody on Wikidata may be them (by name,
+and by dates that fit their publications). New statements cite the page
 revision. `wikidata_todo_rs specieswiki --dry-run "Some page"` shows what
 it would do for one page.
 

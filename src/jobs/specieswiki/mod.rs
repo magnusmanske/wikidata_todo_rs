@@ -4,6 +4,7 @@
 //! (people, serials).
 
 mod page;
+mod people;
 mod ranks;
 mod wikidata;
 mod wikitext;
@@ -249,9 +250,9 @@ impl Bot<'_> {
 
     async fn person(&mut self, page: &Page, person: Person) -> Result<Option<ItemId>> {
         // Without a disambiguation: `Yu-Fan Wang (botanist)`.
-        let name = page.title.split(" (").next().unwrap_or_default();
-        let initial_first = INITIAL_FIRST.as_ref().is_some_and(|r| r.is_match(name));
-        if initial_first || name.contains('/') || !name.contains(' ') {
+        let label = page.title.split(" (").next().unwrap_or_default();
+        let initial_first = INITIAL_FIRST.as_ref().is_some_and(|r| r.is_match(label));
+        if initial_first || label.contains('/') || !label.contains(' ') {
             return skipped(page, "not a full name");
         }
         // Their abbreviation as botanical author identifies them.
@@ -263,24 +264,44 @@ impl Bot<'_> {
                 _ => return skipped(page, "several people have that author abbreviation"),
             }
         }
-        let text = MIDDLE_INITIAL.as_ref().map_or(name.into(), |r| r.replace_all(name, " "));
-        let query = CirrusQuery::new(&text).has_statement(INSTANCE_OF, HUMAN);
-        let namesakes = self.wikidata.search(&query.to_string()).await?;
-        if namesakes.is_empty() {
+        let name = people::Name::new(label, person.sort_key.as_deref());
+        // The one author of their publications with their name.
+        let authors = self.wikidata.authors(&people::dois(&page.html)).await?;
+        let authors = self.wikidata.items(&authors, &["labels", "aliases", "claims"]).await?;
+        match ids(authors.iter().filter(|item| people::is(item, &name, &person))).as_slice() {
+            [] => {}
+            [item] => return self.link(*item, page).await,
+            _ => return skipped(page, "several authors of their publications may be them"),
+        }
+        // Everyone else the name may belong to, but for those whose dates rule them out.
+        let mut found = vec![];
+        for text in name_searches(label) {
+            let query = CirrusQuery::new(&text).has_statement(INSTANCE_OF, HUMAN);
+            let Some(items) = self.wikidata.search_all(&query.to_string()).await? else {
+                return skipped(page, "too many people have such a name");
+            };
+            found.extend(items);
+        }
+        found.sort();
+        found.dedup();
+        let found = match found.is_empty() {
+            true => vec![],
+            false => self.wikidata.items(&found, &["labels", "aliases", "claims"]).await?,
+        };
+        let candidates: Vec<&Value> = found.iter().filter(|item| people::may_be(item, &name, &person)).collect();
+        if candidates.is_empty() {
             let snaks = person_snaks(&person)?;
-            return self.create(page, LocaleString::new("mul", name), vec![], snaks).await;
+            return self.create(page, LocaleString::new("mul", label), vec![], snaks).await;
         }
-        // A namesake born and died in the same years is the same person.
-        if let (Some(born), Some(died)) = (person.born, person.died) {
-            let same: Vec<ItemId> = (self.wikidata.items(&namesakes, &["claims"]).await?.iter())
-                .filter(|item| years(item, BORN).contains(&born) && years(item, DIED).contains(&died))
-                .filter_map(|item| item["id"].as_str()?.parse().ok())
-                .collect();
-            if let [item] = same.as_slice() {
-                return self.link(*item, page).await;
-            }
+        // The one born and died in the same years.
+        let same_years = |item: &&Value| {
+            let has = |property, year: Option<i64>| year.is_some_and(|y| people::years(item, property).contains(&y));
+            has("P569", person.born) && has("P570", person.died)
+        };
+        match ids(candidates.into_iter().filter(same_years)).as_slice() {
+            [item] => self.link(*item, page).await,
+            _ => skipped(page, "someone may have that name already"),
         }
-        skipped(page, "someone has that name already")
     }
 
     /// Creates an item for the page, with the statements `snaks` make,
@@ -339,6 +360,19 @@ impl Bot<'_> {
     }
 }
 
+/// Searches for a name: without middle initials, and, if it has hyphens,
+/// also written together (`Xin-Yue Shen`, `Xinyue Shen`).
+fn name_searches(name: &str) -> Vec<String> {
+    let name = MIDDLE_INITIAL.as_ref().map_or(name.into(), |r| r.replace_all(name, " ")).into_owned();
+    let together = name.replace('-', "");
+    if together == name { vec![name] } else { vec![name, together] }
+}
+
+/// The IDs of the items.
+fn ids<'a>(items: impl Iterator<Item = &'a Value>) -> Vec<ItemId> {
+    items.filter_map(|item| item["id"].as_str()?.parse().ok()).collect()
+}
+
 fn skipped(page: &Page, reason: &str) -> Result<Option<ItemId>> {
     println!("{}: skipped, {reason}", page.title);
     Ok(None)
@@ -387,15 +421,15 @@ fn person_snaks(person: &Person) -> Result<Vec<Snak>> {
     Ok(snaks)
 }
 
-/// The years of an item's `property` dates.
-fn years(item: &Value, property: PropertyId) -> Vec<i64> {
-    let values = crate::wikidata::values(item, &property.to_string());
-    values.iter().filter_map(|v| v["time"].as_str()?.get(1..)?.split('-').next()?.parse().ok()).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn searches_for_names() {
+        assert_eq!(name_searches("Xin-Yue Shen"), ["Xin-Yue Shen", "XinYue Shen"]);
+        assert_eq!(name_searches("Laura A. Frost"), ["Laura Frost"]);
+    }
 
     #[test]
     fn statements_for_people() {
@@ -408,15 +442,5 @@ mod tests {
         let snaks = person_snaks(&person).unwrap();
         let properties: Vec<&str> = snaks.iter().map(|s| s.property()).collect();
         assert_eq!(properties, ["P31", "P106", "P428", "P569"]);
-    }
-
-    #[test]
-    fn years_of_dates() {
-        let item = serde_json::json!({"claims": {"P569": [
-            {"rank": "normal", "mainsnak": {"snaktype": "value", "datavalue": {"value": {"time": "+1833-08-08T00:00:00Z"}}}},
-            {"rank": "deprecated", "mainsnak": {"snaktype": "value", "datavalue": {"value": {"time": "+1834-00-00T00:00:00Z"}}}}
-        ]}});
-        assert_eq!(years(&item, BORN), [1833]);
-        assert!(years(&item, DIED).is_empty());
     }
 }

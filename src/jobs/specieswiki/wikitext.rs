@@ -24,6 +24,10 @@ pub struct Person {
     pub floruit: Option<i64>,
     /// Items of the occupations (P106) their categories name.
     pub occupations: Vec<&'static str>,
+    /// `Family, Given`, as the page sorts.
+    pub sort_key: Option<String>,
+    /// The year of their first publication on the page, or their floruit.
+    pub active_since: Option<i64>,
 }
 
 /// Categories of people by occupation, and the occupations' items.
@@ -67,6 +71,9 @@ static PERSON: LazyLock<Option<Regex>> = LazyLock::new(|| {
 });
 static CATEGORY: LazyLock<Option<Regex>> = LazyLock::new(|| regex(r"\[\[Category:([^\]|]+)"));
 static IPNI: LazyLock<Option<Regex>> = LazyLock::new(|| regex(r"(?i)\{\{IPNI standard form\|([^}|]+)"));
+static SORT_KEY: LazyLock<Option<Regex>> = LazyLock::new(|| regex(r"\{\{DEFAULTSORT:([^}]+)\}\}"));
+/// A publication, by a template named after authors and year: `{{Han et al., 2009a}}`.
+static PUBLICATION_YEAR: LazyLock<Option<Regex>> = LazyLock::new(|| regex(r"\{\{[^{}|\n]+?,? (\d{4})[a-z]?\}\}"));
 /// `'''Name''' (dates)` at the start of a line.
 static LEAD_DATES: LazyLock<Option<Regex>> = LazyLock::new(|| regex(r"(?m)^'''[^'\n]+''' *\(([^)\n]+)\)"));
 static LINK: LazyLock<Option<Regex>> = LazyLock::new(|| regex(r"\[\[(?:[^\]|]*\|)?([^\]]*)\]\]"));
@@ -86,14 +93,18 @@ pub fn classify(title: &str, wikitext: &str) -> WikitextKind {
     if has(&SOURCE) || !has(&PERSON) {
         return WikitextKind::Other;
     }
-    let ipni = IPNI.as_ref().and_then(|r| r.captures(wikitext)).map(|c| c[1].trim().to_string());
+    let first = |r: &Option<Regex>| r.as_ref()?.captures(wikitext).map(|c| c[1].trim().to_string());
     let (born, died, floruit) = lead_dates(wikitext).unwrap_or_default();
+    let published = PUBLICATION_YEAR.as_ref().into_iter().flat_map(|r| r.captures_iter(wikitext));
+    let published = published.filter_map(|c| c[1].parse::<i64>().ok()).min();
     WikitextKind::Person(Person {
-        ipni: ipni.filter(|i| !i.is_empty()),
+        ipni: first(&IPNI).filter(|i| !i.is_empty()),
         born,
         died,
         floruit,
         occupations: occupations(wikitext),
+        sort_key: first(&SORT_KEY),
+        active_since: published.into_iter().chain(floruit).min(),
     })
 }
 
@@ -148,12 +159,15 @@ mod tests {
     fn people() {
         let p = person(
             "'''Liu-Fu Han''' (1965– ), Chinese lichenologist.\n{{IPNI standard form|L.F.Han}}\n\
-             {{Taxa authored}}\n[[Category:Taxon authorities]]\n[[Category:Lichenologists]]\n[[Category:Mycologists]]",
+             {{Taxa authored}}\n{{Han et al., 2015b}}\n{{Han, Guo & Wei, 2009a}}\n{{DEFAULTSORT:Han, Liu Fu}}\n\
+             [[Category:Taxon authorities]]\n[[Category:Lichenologists]]\n[[Category:Mycologists]]",
         );
         let expected = Person {
             ipni: Some("L.F.Han".to_string()),
             born: Some(1965),
             occupations: vec!["Q15924544"],
+            sort_key: Some("Han, Liu Fu".to_string()),
+            active_since: Some(2009),
             ..Default::default()
         };
         assert_eq!(p, expected);
