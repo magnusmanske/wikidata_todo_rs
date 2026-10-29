@@ -95,7 +95,7 @@ async fn results(state: &AppState, request: &Request) -> Result<Results, AppErro
             let id = pile.parse().map_err(|_| AppError::BadRequest("The PagePile ID must be a number.".into()))?;
             let pile = pagepile::get(&state.http, id, MAX_PILE_PAGES).await?;
             let wiki = Wiki::from_dbname(&pile.wiki)?;
-            (wiki, pile.pages.iter().take(MAX_PILE_PAGES).map(|p| db_title(p)).collect(), vec![])
+            (wiki, pile.pages.iter().map(|p| db_title(&p.title)).collect(), vec![])
         }
     };
     let titles = follow_redirects(state, &wiki, titles).await?;
@@ -118,7 +118,7 @@ async fn results(state: &AppState, request: &Request) -> Result<Results, AppErro
     }
     if request.format == "pagepile" && !results.items.is_empty() {
         let id = pagepile::create(&state.http, "wikidatawiki", &results.items).await?;
-        results.pile = Some((id, pagepile::url(id)));
+        results.pile = Some((id, pagepile::url(&state.http, id)));
     }
     Ok(results)
 }

@@ -2,61 +2,32 @@
 
 use crate::replicas::{Replicas, select_in};
 use crate::wiki::Wiki;
-use anyhow::{Context, Result, bail};
-use serde::Deserialize;
+use anyhow::{Context, Result};
+use pagepile::client::{Client, DEFAULT_API, NewPage, Page, Pile, Query};
 use std::collections::HashMap;
 
-const API: &str = "https://pagepile.toolforge.org/api.php";
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Pile {
-    pub id: u64,
-    /// The database name, e.g. `enwiki`.
-    pub wiki: String,
-    /// Titles with namespace prefix, spaces as underscores or spaces, as PagePile gives them.
-    pub pages: Vec<String>,
-}
-
-#[derive(Deserialize)]
-struct Data {
-    #[serde(default)]
-    pages: Vec<String>,
-    #[serde(default)]
-    wiki: String,
-    #[serde(default)]
-    status: Option<String>,
+fn client(http: &reqwest::Client) -> Client {
+    Client::with_http(http.clone(), DEFAULT_API)
 }
 
 /// A pile; at most its first `limit` pages, as piles can be huge.
 pub async fn get(http: &reqwest::Client, id: u64, limit: usize) -> Result<Pile> {
-    let (id_s, limit) = (id.to_string(), limit.to_string());
-    let data: Data = http
-        .get(API)
-        .query(&[("id", id_s.as_str()), ("action", "get_data"), ("format", "json"), ("doit", "1"), ("limit", &limit)])
-        .send()
-        .await
-        .and_then(reqwest::Response::error_for_status)
-        .context("PagePile did not answer")?
-        .json()
-        .await
-        .context("PagePile's answer is not JSON")?;
-    if data.wiki.is_empty() {
-        bail!("PagePile #{id}: {}", data.status.unwrap_or_else(|| "no such pile".to_string()));
-    }
-    Ok(Pile { id, wiki: data.wiki, pages: data.pages })
+    let query = Query { limit: Some(limit as u64), ..Default::default() };
+    let mut pile = client(http).pile_with(id, &query).await.with_context(|| format!("PagePile #{id}"))?;
+    // In case PagePile ignores the limit.
+    pile.pages.truncate(limit);
+    Ok(pile)
 }
 
-/// The Wikidata items of a pile: its `Q…` pages for a Wikidata pile, else the
+/// The Wikidata items of a pile: its items for a Wikidata pile, else the
 /// items of its namespace-0 pages (pages without an item are left out); of
 /// at most its first `limit` pages.
 pub async fn items(http: &reqwest::Client, replicas: &Replicas, id: u64, limit: usize) -> Result<Vec<String>> {
-    let mut pile = get(http, id, limit).await?;
-    // In case PagePile ignores the limit.
-    pile.pages.truncate(limit);
-    if pile.wiki == "wikidatawiki" {
-        return Ok(pile.pages.into_iter().filter(|p| p.starts_with('Q')).collect());
+    let pile = get(http, id, limit).await?;
+    if pile.wiki == pagepile::wiki::Wiki::WIKIDATA {
+        return Ok(pile.items().map(str::to_string).collect());
     }
-    let titles: Vec<String> = pile.pages.iter().filter(|p| !p.contains(':')).map(|p| p.replace('_', " ")).collect();
+    let titles: Vec<String> = pile.pages.iter().filter(|p| p.namespace == 0).map(Page::text).collect();
     let by_title = items_for_titles(replicas, &pile.wiki, &titles).await?;
     Ok(titles.iter().filter_map(|t| by_title.get(t).cloned()).collect())
 }
@@ -71,21 +42,11 @@ pub async fn items_for_titles(replicas: &Replicas, wiki: &str, titles: &[String]
 
 /// Makes a new pile of `pages` (titles; for Wikidata, item IDs) on `wiki`; returns its ID.
 pub async fn create(http: &reqwest::Client, wiki: &str, pages: &[String]) -> Result<u64> {
-    let data = pages.join("\n");
-    let json: serde_json::Value = http
-        .post(API)
-        .form(&[("action", "create_pile_with_data"), ("wiki", wiki), ("data", data.as_str())])
-        .send()
-        .await
-        .and_then(reqwest::Response::error_for_status)
-        .context("PagePile did not answer")?
-        .json()
-        .await
-        .context("PagePile's answer is not JSON")?;
-    json["pile"]["id"].as_u64().with_context(|| format!("PagePile made no pile: {}", json["status"]))
+    let pages: Vec<NewPage> = pages.iter().map(NewPage::title).collect();
+    client(http).create(wiki, &pages).await.context("PagePile made no pile")
 }
 
 /// Where a pile can be seen.
-pub fn url(id: u64) -> String {
-    format!("{API}?id={id}&action=get_data&format=html&doit=1")
+pub fn url(http: &reqwest::Client, id: u64) -> String {
+    client(http).view_url(id)
 }

@@ -1939,6 +1939,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pagepile"
+version = "0.1.0"
+source = "git+https://codeberg.org/magnusmanske/pagepile#cb315095d854c0903b6e72715e002f05bc9f7b86"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3574,6 +3585,7 @@ dependencies = [
  "hmac",
  "include_dir",
  "mime_guess",
+ "pagepile",
  "percent-encoding",
  "rand 0.9.5",
  "regex",

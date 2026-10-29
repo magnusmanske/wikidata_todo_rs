@@ -83,7 +83,7 @@ pub async fn handler(
     if page.pagepile {
         let titles: Vec<String> = items.into_iter().map(|i| i.id).collect();
         let id = pagepile::create(&state.http, "wikidatawiki", &titles).await?;
-        return Ok(Redirect::to(&pagepile::url(id)).into_response());
+        return Ok(Redirect::to(&pagepile::url(&state.http, id)).into_response());
     }
     page.items = Some(items);
     Ok(render(&page)?.into_response())
