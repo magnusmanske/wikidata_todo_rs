@@ -12,7 +12,7 @@ fn client(http: &reqwest::Client) -> Client {
 
 /// A pile; at most its first `limit` pages, as piles can be huge.
 pub async fn get(http: &reqwest::Client, id: u64, limit: usize) -> Result<Pile> {
-    let query = Query { limit: Some(limit as u64), ..Default::default() };
+    let query = Query::default().limit(limit as u64);
     let mut pile = client(http).pile_with(id, &query).await.with_context(|| format!("PagePile #{id}"))?;
     // In case PagePile ignores the limit.
     pile.pages.truncate(limit);
