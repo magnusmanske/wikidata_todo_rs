@@ -14,7 +14,7 @@
 <h2>{{ results.items.len() }} items</h2>
 {% if results.capped %}<p class="muted">Only the first {{ max_candidates }} matching labels were looked at.</p>{% endif %}
 {% if !results.items.is_empty() %}
-<form method="post" action="https://petscan.wmcloud.org/" target="_blank">
+<form method="post" action="https://petscan.toolforge.org/" target="_blank">
   <input type="hidden" name="manual_list_wiki" value="wikidatawiki">
   <input type="hidden" name="doit" value="1">
   <label>Items <textarea name="manual_list" rows="8" class="code">{% for (q, _) in results.items %}{{ q }}

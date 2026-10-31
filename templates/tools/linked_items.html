@@ -26,7 +26,7 @@
 {% if let Some((id, url)) = results.pile %}
 <p>Your new PagePile is <a href="{{ url }}">#{{ id }}</a>.</p>
 {% else %}
-<form method="post" action="https://petscan.wmcloud.org/">
+<form method="post" action="https://petscan.toolforge.org/">
   <label>Items <textarea name="manual_list" rows="10" class="code">{{ results.items.join("\n") }}</textarea></label>
   <input type="hidden" name="manual_list_wiki" value="wikidatawiki">
   <button name="doit" value="1">Open in PetScan</button>

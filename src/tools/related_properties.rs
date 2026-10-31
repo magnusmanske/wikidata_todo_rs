@@ -131,7 +131,7 @@ fn subgroup_query(q: &str, var: &str, property: &str) -> Option<String> {
 }
 
 fn petscan_url(query: &str) -> String {
-    format!("https://petscan.wmcloud.org/?doit=1&sparql={}", encode_component(query))
+    format!("https://petscan.toolforge.org/?doit=1&sparql={}", encode_component(query))
 }
 
 #[cfg(test)]

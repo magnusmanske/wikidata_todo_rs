@@ -13,7 +13,7 @@ enum Fate {
     MovedTo(&'static str),
 }
 
-const PETSCAN: &str = "https://petscan.wmcloud.org/";
+const PETSCAN: &str = "https://petscan.toolforge.org/";
 
 const RETIRED: &[(&str, Fate)] = &[
     // Deactivated in the PHP tool already.
@@ -74,7 +74,7 @@ mod tests {
         }
         let moved = get(dir.path(), "/autolist2.php?manual_list=Q1").await;
         assert_eq!(moved.status.as_u16(), 308);
-        assert_eq!(moved.headers["location"], "https://petscan.wmcloud.org/?manual_list=Q1");
+        assert_eq!(moved.headers["location"], "https://petscan.toolforge.org/?manual_list=Q1");
         let location = async |uri| get(dir.path(), uri).await.headers["location"].to_str().unwrap().to_string();
         assert_eq!(location("/wikiflix").await, "https://wikiflix.toolforge.org/");
         assert_eq!(location("/wikiflix/").await, "https://wikiflix.toolforge.org/");

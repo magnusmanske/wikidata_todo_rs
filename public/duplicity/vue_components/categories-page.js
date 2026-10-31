@@ -30,7 +30,7 @@ export default {
                 wikidata_item: 'without',
                 doit: '1',
             });
-            return `https://petscan.wmcloud.org/?${params}`;
+            return `https://petscan.toolforge.org/?${params}`;
         },
         async loadCategories() {
             this.loading = true;

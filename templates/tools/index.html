@@ -63,7 +63,7 @@
 // The queries go to QLever: on WDQS, those for large countries time out.
 (() => {
   const select = document.getElementById('country');
-  const petscan = q => 'https://petscan.wmcloud.org/?doit=1&sparql_server=qlever_wd&sparql=' + encodeURIComponent(q);
+  const petscan = q => 'https://petscan.toolforge.org/?doit=1&sparql_server=qlever_wd&sparql=' + encodeURIComponent(q);
   const fist = q => 'https://fist.toolforge.org/wdfist/?prefilled=1&no_images_only=1&sparql_server=qlever_wd&sparql='
     + encodeURIComponent(q);
   const PREFIXES = 'PREFIX wd: <http://www.wikidata.org/entity/> PREFIX wdt: <http://www.wikidata.org/prop/direct/> ';
