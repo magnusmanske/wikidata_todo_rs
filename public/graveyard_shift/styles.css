@@ -1,0 +1,43 @@
+/* Graveyard shift, in the look of the wikidata-todo tools (assets/style.css). */
+
+[v-cloak] { display: none !important; }
+
+/* The interface language sits above the view, as in the other apps. */
+#app .app-tools {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    color: var(--muted);
+}
+#app .app-tools form { display: flex; align-items: center; gap: 0.25rem; max-width: none; margin: 0; }
+#app .app-tools select { width: auto; padding: 0.15rem 0.35rem; font-size: 0.875rem; }
+#app .app-tools a[href*="tooltranslate"] { font-size: 1.25rem !important; }
+
+/* Errors and hints. */
+#app .note { margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+#app .note.error { border-color: var(--danger); color: var(--danger); }
+#app .note.warning { border-color: #d39e00; }
+
+#app .nowrap { white-space: nowrap; }
+#app .yes { color: #1a7f37; }
+@media (prefers-color-scheme: dark) { #app .yes { color: #3fb950; } }
+
+/* The cemetery chosen by hand: one field, then a button. */
+#app .cemetery-form { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin-top: 1rem; }
+#app .cemetery-form label { flex: 0 1 14rem; }
+
+/* Leaflet needs a container with a height; the map fills it. */
+#app .map-wrap {
+    height: 500px;
+    margin-bottom: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+@media (max-width: 900px) {
+    #app .map-wrap { height: 60vh; }
+}

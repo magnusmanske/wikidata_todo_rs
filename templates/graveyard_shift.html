@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block head %}
+<meta name="robots" content="NOINDEX, NOFOLLOW">
+<link rel="stylesheet" href="https://tools-static.wmflabs.org/cdnjs/ajax/libs/leaflet/1.5.1/leaflet.css">
+<link rel="stylesheet" href="/graveyard_shift/styles.css">
+{% endblock %}
+{% block content %}
+<div id="app" v-cloak>
+  <div class="app-tools">
+    <div id="tooltranslate_wrapper"></div>
+  </div>
+
+  <router-view :key="$route.path"><p class="muted">Loading…</p></router-view>
+</div>
+
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/vue/2.5.13/vue.min.js"></script>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/vue-router/3.0.1/vue-router.min.js"></script>
+<script src="https://tools-static.wmflabs.org/tooltranslate/tt.js"></script>
+<script src="https://tools-static.wmflabs.org/magnustools/resources/js/wikidata.js"></script>
+<script src="https://tools-static.wmflabs.org/magnustools/resources/vue/shared.js"></script>
+<script src="https://tools-static.wmflabs.org/cdnjs/ajax/libs/leaflet/1.5.1/leaflet.js"></script>
+<script src="/graveyard_shift/vue.js"></script>
+{% endblock %}

@@ -61,11 +61,9 @@ $(document).ready ( function () {
     vue_components.toolname = 'graveyard_shift' ;
 //    vue_components.components_base_url = 'https://tools.wmflabs.org/magnustools/resources/vue/' ; // For testing; turn off to use tools-static
     Promise.all ( [
-        vue_components.loadComponents ( ['wd-date','wd-link','tool-translate','tool-navbar','commons-thumbnail','widar','autodesc','typeahead-search','value-validator',
-//            'vue_components/prop-value.html',
+        vue_components.loadComponents ( ['tool-translate','wd-link',
             'vue_components/main-page.html',
             'vue_components/map.html',
-//            'vue_components/subject-page.html',
             ] )
     ] )
      .then ( () => {
@@ -81,6 +79,9 @@ $(document).ready ( function () {
           ] ;
           router = new VueRouter({routes}) ;
           app = new Vue ( { router } ) .$mount('#app') ;
+
+          // The page has no navbar, so the language selector goes here.
+          tt.addILdropdown ( '#tooltranslate_wrapper' ) ;
         //} ) ;
 
 

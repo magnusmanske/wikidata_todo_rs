@@ -25,6 +25,7 @@ mod duplicity_game_api;
 mod findagrave;
 mod get_item_names;
 mod gnd;
+mod graveyard_shift;
 mod images_in_categories_used_on_commons;
 mod images_near_items;
 mod important_blank_items;
@@ -126,13 +127,15 @@ const ALSO_AT_OLD_ADDRESS: &[&str] =
     &["get_item_names", "pagepile2kml", "related_properties", "resolver", "sparql_rc", "user_edits"];
 
 pub fn routes() -> Router<State> {
-    // The Duplicity app keeps its files, but its page is rendered here so that
-    // it has the shared header, footer and stylesheet.
+    // Duplicity and Graveyard shift keep their files, but their pages are
+    // rendered here so that they have the shared header, footer and stylesheet.
     let router = Router::new()
         .route("/", get(index::handler))
         .route("/index.php", get(index::handler))
         .route("/duplicity/", get(duplicity::page))
-        .route("/duplicity/index.html", get(duplicity::page));
+        .route("/duplicity/index.html", get(duplicity::page))
+        .route("/graveyard_shift/", get(graveyard_shift::page))
+        .route("/graveyard_shift/index.html", get(graveyard_shift::page));
     let router = pages().into_iter().fold(router, |router, (name, handler)| {
         let handler = counted(name, handler);
         let path = format!("/{name}/");
