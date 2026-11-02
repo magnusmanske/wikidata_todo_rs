@@ -49,6 +49,42 @@ WDQ from the browser stay broken.
 | process-specieswiki | `specieswiki` (`--dry-run` for now; the PHP job still runs) |
 | auto-add-dewiki, moon-bot, top-items-no-statement, update-dumps, update-photos-by-employer | retired: broken for months or years (missing libraries, removed tables, dead WDQ, dumps no longer reachable) |
 
+## Graveyard shift
+
+The app keeps its own Vue/jQuery/Leaflet code; only its page shell and styles
+follow the tools' look. It lists people buried at a cemetery (P119), their
+grave image (P1442) and grave coordinates (a P625 qualifier on the P119
+statement), from WDQS. The map zooms past the tile service's level 18 by
+enlarging the level-18 tiles.
+
+Next, in this order:
+
+1. **Place a grave on the map.** A "place grave" mode rather than a bare map
+   click, which would fight panning and is awkward on touch. The next click is
+   the coordinate; the user then picks one of the cemetery's people who has no
+   coordinates yet, and confirms person, cemetery and position. If that person
+   already has a P119 statement for the cemetery, add a P625 qualifier to it,
+   else add the P119 statement with that qualifier. The query should return the
+   statement ID (`?statement` in the `p:P119` part) so the edit needs no second
+   lookup. Show an unconfirmed marker until the edit succeeds; on failure the
+   table and map stay as they were. This brings Widar login back to the tools
+   row (the app edits again), with the same-origin check Duplicity uses.
+2. **Attach an image.** The file belongs on Commons; the person gets P1442.
+   First pick an existing Commons file (by title, or via the geosearch call
+   already sketched in `main-page.html`) and set P1442. Uploading is its own
+   step: Commons' `action=upload` needs an OAuth consumer allowed to upload
+   (the Wikidata one may not be), a CSRF token, a multipart request, and a
+   description with licence and source; only a successful upload leads to the
+   Wikidata edit. Keep uploads in the browser unless rate limits or file sizes
+   force them through the tool's API.
+3. **Use the table as the work queue.** People without coordinates are already
+   marked; a "place grave" button per person (or in the toolbar, then pick the
+   person) ties 1 and 2 together. The mobile table is a card list, so the
+   button has room there.
+
+Tests must not edit live Wikidata. Any writes go through Widar directly, as
+the PHP tools did; the app itself stays client-side.
+
 ## Cutover
 1. Push this repository to GitHub; `./build.sh` builds the image.
 2. `$TOOL_DATA_DIR/wikidata_todo_rs.json` from `config.json.template`, with a `cookie_key` (`openssl rand -hex 64`); `oauth.ini` is already in the tool home. Check that the OAuth consumer accepts the callbacks `https://wikidata-todo.toolforge.org/api.php?…`, `/duplicity/api.php?…`, `/relator/api.php`, `/relator2/api.php` (the PHP used the same).

@@ -16,7 +16,7 @@
         <h2>Step 1</h2>
         <p tt='step1_blurb'></p>
         <div v-if='cemeteries.length>0' class='table-wrap'>
-            <table>
+            <table class='responsive'>
                 <thead>
                     <tr>
                         <th tt='cemetery'></th>
@@ -27,13 +27,22 @@
                 <tbody>
                     <tr v-for="c in cemeteries" :key="'cemetery_'+c.q">
                         <td>
-                            <a :href='"#/"+c.q' @click.prevent='choose(c.q)'>
-                                <wd-link :item='c.q' as_text='1'></wd-link>
-                            </a>
-                            <small>[<wd-link :item='c.q' :label='c.q'></wd-link>]</small>
+                            <span class='cell-label' tt='cemetery'></span>
+                            <span class='cell-value'>
+                                <a :href='"#/"+c.q' @click.prevent='choose(c.q)'>
+                                    <wd-link :item='c.q' as_text='1'></wd-link>
+                                </a>
+                                <small>[<wd-link :item='c.q' :label='c.q'></wd-link>]</small>
+                            </span>
                         </td>
-                        <td class='num'>{{c.distance}} km</td>
-                        <td>{{c.types.join(", ")}}</td>
+                        <td class='num'>
+                            <span class='cell-label' tt='distance'></span>
+                            <span class='cell-value'>{{c.distance}} km</span>
+                        </td>
+                        <td>
+                            <span class='cell-label' tt='type'></span>
+                            <span class='cell-value'>{{c.types.join(", ")}}</span>
+                        </td>
                     </tr>
                 </tbody>
             </table>
@@ -57,7 +66,7 @@
             </graveyard-map>
         </div>
         <div class='table-wrap'>
-            <table>
+            <table class='responsive'>
                 <thead>
                     <tr>
                         <th tt='person_name'></th>
@@ -70,21 +79,30 @@
                 <tbody>
                     <tr v-for='pq in people_list' :key="'person_row_'+pq">
                         <td>
-                            <wd-link :item='pq' smallq='1'></wd-link>
-                        </td>
-                        <td class='nowrap'>
-                            {{people[pq].born_pretty}}
-                        </td>
-                        <td class='nowrap'>
-                            {{people[pq].died_pretty}}
+                            <span class='cell-label' tt='person_name'></span>
+                            <span class='cell-value'><wd-link :item='pq' smallq='1'></wd-link></span>
                         </td>
                         <td>
-                            <span v-if='typeof people[pq].grave_image!="undefined"' class='yes'>&#10003;</span>
-                            <span v-else>—</span>
+                            <span class='cell-label' tt='born'></span>
+                            <span class='cell-value nowrap'>{{people[pq].born_pretty}}</span>
                         </td>
                         <td>
-                            <span v-if='typeof people[pq].grave_coordinates!="undefined"' class='yes'>&#10003;</span>
-                            <span v-else>—</span>
+                            <span class='cell-label' tt='died'></span>
+                            <span class='cell-value nowrap'>{{people[pq].died_pretty}}</span>
+                        </td>
+                        <td>
+                            <span class='cell-label' tt='has_grave_image'></span>
+                            <span class='cell-value'>
+                                <span v-if='typeof people[pq].grave_image!="undefined"' class='yes'>&#10003;</span>
+                                <span v-else>—</span>
+                            </span>
+                        </td>
+                        <td>
+                            <span class='cell-label' tt='has_grave_coordinates'></span>
+                            <span class='cell-value'>
+                                <span v-if='typeof people[pq].grave_coordinates!="undefined"' class='yes'>&#10003;</span>
+                                <span v-else>—</span>
+                            </span>
                         </td>
                     </tr>
                 </tbody>

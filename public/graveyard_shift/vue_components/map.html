@@ -54,13 +54,21 @@ Vue.component ( 'graveyard-map' , {
     
             var style = 'osm-intl';
             var server = 'https://maps.wikimedia.org/';
+
+            // The tiles stop at level 18. Above that, Leaflet enlarges the level-18
+            // tiles instead of showing nothing, so zooming in still works.
+            const TILE_MAX_ZOOM = 18 ;
+            const MAX_ZOOM = 20 ;
             
             // Create a map; at the view in the address, if there is one.
             let view = me.$route.query ;
             let has_view = view.lat && view.lon && view.zoom ;
-            var map = has_view
-                ? L.map(me.id).setView([view.lat*1,view.lon*1], view.zoom*1)
-                : L.map(me.id).setView([me.lat*1,me.lon*1], me.zoom*1);
+            var map = L.map(me.id, { maxZoom: MAX_ZOOM }) ;
+            if ( has_view ) {
+                map.setView([view.lat*1,view.lon*1], view.zoom*1) ;
+            } else {
+                map.setView([me.lat*1,me.lon*1], me.zoom*1) ;
+            }
             // Keeps the address up to date, as a permalink of the view.
             map.on ( 'moveend' , function () {
                 let c = map.getCenter() ;
@@ -69,7 +77,8 @@ Vue.component ( 'graveyard-map' , {
 
             // Add a map layer
             L.tileLayer(server + style + '/{z}/{x}/{y}.png', {
-                maxZoom: 18,
+                maxNativeZoom: TILE_MAX_ZOOM,
+                maxZoom: MAX_ZOOM,
                 //id: o.id+'-01',
                 //attribution: 'Wikimedia maps beta | Map data &copy; <a href="http://openstreetmap.org/copyright">OpenStreetMap contributors</a>'
             }).addTo(map);
@@ -102,8 +111,6 @@ Vue.component ( 'graveyard-map' , {
             let group = new L.featureGroup(markers);
             group.addTo(map);
             if ( markers.length > 1 ) map.fitBounds(group.getBounds());
-
-            map.options.maxZoom = 20 ;
         } ,    
     },
     template : '#graveyard-map-template'

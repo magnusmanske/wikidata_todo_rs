@@ -26,6 +26,11 @@
 #app .yes { color: #1a7f37; }
 @media (prefers-color-scheme: dark) { #app .yes { color: #3fb950; } }
 
+/* Long names and types wrap instead of widening the page. */
+#app h2, #app td { overflow-wrap: anywhere; }
+#app .cell-label { display: none; }
+#app .cell-value { min-width: 0; }
+
 /* The cemetery chosen by hand: one field, then a button. */
 #app .cemetery-form { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin-top: 1rem; }
 #app .cemetery-form label { flex: 0 1 14rem; }
@@ -39,5 +44,42 @@
     overflow: hidden;
 }
 @media (max-width: 900px) {
-    #app .map-wrap { height: 60vh; }
+    #app .map-wrap { height: 60vh; min-height: 260px; max-height: 500px; }
+}
+
+/* On a phone, rows become labelled cards rather than a wide table. */
+@media (max-width: 640px) {
+    #app .app-tools { justify-content: flex-start; }
+
+    #app .cemetery-form { display: block; }
+    #app .cemetery-form button { margin-top: 0.75rem; }
+
+    #app .map-wrap {
+        margin-left: -1.25rem;
+        margin-right: -1.25rem;
+        border-left: 0;
+        border-right: 0;
+        border-radius: 0;
+    }
+
+    #app table.responsive thead { display: none; }
+    #app table.responsive,
+    #app table.responsive tbody,
+    #app table.responsive tr,
+    #app table.responsive td { display: block; }
+    #app table.responsive tr {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--line);
+    }
+    #app table.responsive td {
+        display: grid;
+        grid-template-columns: 7.5rem 1fr;
+        gap: 0.5rem;
+        padding: 0.15rem 0.25rem;
+        border: 0;
+        text-align: left;
+    }
+    #app table.responsive td:first-child .cell-value { font-weight: 600; }
+    #app table.responsive .cell-label { display: block; color: var(--muted); font-size: 0.8125rem; }
+    #app table.responsive td.num { text-align: left; }
 }
