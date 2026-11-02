@@ -43,7 +43,8 @@ pub struct RedirectRequest {
     cat: String,
 }
 
-/// `duplicity.php?wiki=enwiki&page=X` → `/duplicity/#/article/enwiki/X`, as the PHP did.
+/// `duplicity.php?wiki=enwiki&page=X` → `/duplicity/#/article/enwiki/X`,
+/// as the PHP did; a wiki on its own opens that wiki's list.
 pub async fn redirect(Params(request): Params<RedirectRequest>) -> Response {
     widar::redirect(&app_url(&request))
 }
@@ -61,13 +62,16 @@ pub async fn page() -> Result<Html<String>, AppError> {
 }
 
 fn app_url(request: &RedirectRequest) -> String {
-    let mode = match request.mode.as_str() {
-        "cats" => "categories",
-        "" if !request.page.is_empty() => "article",
-        mode => mode,
+    let wiki = request.wiki.trim();
+    let mode = match (request.mode.as_str(), request.page.is_empty(), wiki.is_empty()) {
+        ("cats", _, _) => "categories",
+        ("", false, _) => "article",
+        // A wiki without a view: its list, the natural entry point.
+        ("", true, false) => "list",
+        (mode, _, _) => mode,
     };
     let mut url = format!("/duplicity/#/{mode}");
-    for part in [request.wiki.as_str(), request.cat.trim(), request.page.as_str()] {
+    for part in [wiki, request.cat.trim(), request.page.as_str()] {
         if !part.is_empty() {
             url.push('/');
             url.push_str(&fragment(part));
@@ -437,6 +441,9 @@ mod tests {
         assert_eq!(app_url(&request("dewiki", "", "stats", "")), "/duplicity/#/stats/dewiki");
         assert_eq!(app_url(&request("dewiki", "", "list", "")), "/duplicity/#/list/dewiki");
         assert_eq!(app_url(&request("", "", "", "")), "/duplicity/#/");
+        // A wiki without a view opens its list.
+        assert_eq!(app_url(&request("dewiki", "", "", "")), "/duplicity/#/list/dewiki");
+        assert_eq!(app_url(&request("dewiki", "", "", "A b")), "/duplicity/#/list/dewiki/A%20b");
         assert_eq!(app_url(&request("enwiki", "", "list", " A b ")), "/duplicity/#/list/enwiki/A%20b");
         assert_eq!(app_url(&request("enwiki", "a\r\nb", "", "")), "/duplicity/#/article/enwiki/a%0D%0Ab");
         // Non-ASCII, and characters that would become a header, a route segment
@@ -477,6 +484,7 @@ mod tests {
         }
         let location = async |uri| get(dir.path(), uri).await.headers["location"].to_str().unwrap().to_string();
         assert_eq!(location("/duplicity.php").await, "/duplicity/#/");
+        assert_eq!(location("/duplicity.php?wiki=dewiki").await, "/duplicity/#/list/dewiki");
         assert_eq!(location("/duplicity.php?wiki=dewiki&mode=list").await, "/duplicity/#/list/dewiki");
         assert_eq!(location("/duplicity.php?wiki=dewiki&mode=cats").await, "/duplicity/#/categories/dewiki");
         assert_eq!(location("/duplicity.php?wiki=dewiki&mode=stats").await, "/duplicity/#/stats/dewiki");
