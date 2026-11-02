@@ -76,9 +76,22 @@ fn app_url(request: &RedirectRequest) -> String {
     url
 }
 
-/// A part of a URL fragment, with what a `Location` header cannot carry encoded.
+/// A part of a URL fragment, percent-encoded so that a `Location` header can
+/// carry it (headers are ASCII), it stays one route segment (`/`), and the hash
+/// router does not read part of it as a query (`?`) or an escape (`%`).
 fn fragment(part: &str) -> String {
-    const UNSAFE: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>');
+    const UNSAFE: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
+        .add(b' ')
+        .add(b'"')
+        .add(b'%')
+        .add(b'#')
+        .add(b'?')
+        .add(b'<')
+        .add(b'>')
+        .add(b'\\')
+        .add(b'`')
+        .add(b'^')
+        .add(b'/');
     percent_encoding::utf8_percent_encode(part, UNSAFE).to_string()
 }
 
@@ -421,9 +434,16 @@ mod tests {
             "/duplicity/#/article/enwiki/Real_Pro_Volleyball"
         );
         assert_eq!(app_url(&request("dewiki", "", "cats", "")), "/duplicity/#/categories/dewiki");
+        assert_eq!(app_url(&request("dewiki", "", "stats", "")), "/duplicity/#/stats/dewiki");
+        assert_eq!(app_url(&request("dewiki", "", "list", "")), "/duplicity/#/list/dewiki");
         assert_eq!(app_url(&request("", "", "", "")), "/duplicity/#/");
         assert_eq!(app_url(&request("enwiki", "", "list", " A b ")), "/duplicity/#/list/enwiki/A%20b");
         assert_eq!(app_url(&request("enwiki", "a\r\nb", "", "")), "/duplicity/#/article/enwiki/a%0D%0Ab");
+        // Non-ASCII, and characters that would become a header, a route segment
+        // boundary, a query or an escape.
+        assert_eq!(app_url(&request("dewiki", "München", "", "")), "/duplicity/#/article/dewiki/M%C3%BCnchen");
+        assert_eq!(app_url(&request("enwiki", "A/B?C", "", "")), "/duplicity/#/article/enwiki/A%2FB%3FC");
+        assert_eq!(app_url(&request("enwiki", "100%", "", "")), "/duplicity/#/article/enwiki/100%25");
     }
 
     #[test]
@@ -438,13 +458,33 @@ mod tests {
     #[tokio::test]
     async fn routes() {
         let dir = tempfile::tempdir().unwrap();
-        for path in ["/duplicity/", "/duplicity/index.html"] {
+        for path in ["/duplicity/", "/duplicity/index.html", "/duplicity/?wiki=dewiki"] {
             let page = get(dir.path(), path).await;
-            assert_eq!(page.status.as_u16(), 200);
+            assert_eq!(page.status.as_u16(), 200, "{path}");
             assert!(page.body.contains("/assets/style.css"), "{path}");
             assert!(page.body.contains("id=\"app\""), "{path}");
             assert!(page.body.contains("/duplicity/app.js"), "{path}");
         }
+        // The app's page, addressed without the trailing slash, as it was served.
+        let slashless = get(dir.path(), "/duplicity").await;
+        assert_eq!(slashless.status.as_u16(), 308);
+        assert_eq!(slashless.headers["location"], "/duplicity/");
+        // The files the app loads are unchanged.
+        for (path, kind) in [("/duplicity/app.js", "javascript"), ("/duplicity/styles.css", "text/css")] {
+            let file = get(dir.path(), path).await;
+            assert_eq!(file.status.as_u16(), 200, "{path}");
+            assert!(file.headers["content-type"].to_str().unwrap().contains(kind), "{path}");
+        }
+        let location = async |uri| get(dir.path(), uri).await.headers["location"].to_str().unwrap().to_string();
+        assert_eq!(location("/duplicity.php").await, "/duplicity/#/");
+        assert_eq!(location("/duplicity.php?wiki=dewiki&mode=list").await, "/duplicity/#/list/dewiki");
+        assert_eq!(location("/duplicity.php?wiki=dewiki&mode=cats").await, "/duplicity/#/categories/dewiki");
+        assert_eq!(location("/duplicity.php?wiki=dewiki&mode=stats").await, "/duplicity/#/stats/dewiki");
+        assert_eq!(location("/duplicity.php?wiki=dewiki&mode=list&cat=A%20b").await, "/duplicity/#/list/dewiki/A%20b");
+        assert_eq!(
+            location("/duplicity.php?wiki=dewiki&page=M%C3%BCnchen").await,
+            "/duplicity/#/article/dewiki/M%C3%BCnchen"
+        );
         let moved = get(dir.path(), "/duplicity.php?wiki=enwiki&norand=1&page=Real%5FPro%5FVolleyball").await;
         assert_eq!(moved.status.as_u16(), 302);
         assert_eq!(moved.headers["location"], "/duplicity/#/article/enwiki/Real_Pro_Volleyball");
