@@ -12,6 +12,7 @@ use std::fs::File;
 use std::time::Duration;
 use wikimisc::sparql_client::SparqlClient;
 use wikimisc::sparql_endpoint::SparqlEndpoint;
+use wikimisc::sparql_retry::RetryPolicy;
 
 /// WDQS stops a query after 60 seconds; this leaves time for the answer.
 const TIMEOUT: Duration = Duration::from_secs(90);
@@ -20,6 +21,10 @@ const TIMEOUT: Duration = Duration::from_secs(90);
 const MAX_JSON_BYTES: usize = 32 * 1024 * 1024;
 /// CSV results go to a temporary file and are read row by row.
 const MAX_CSV_BYTES: usize = 2 * 1024 * 1024 * 1024;
+/// QLever's public endpoint sees many tools through this tool's egress IP and
+/// answers 429 while it is busy; the next attempt, a few seconds later, usually
+/// succeeds. Four retries wait 1, 2, 4 and 8 seconds.
+const QLEVER_RETRIES: u32 = 4;
 
 #[derive(Debug, Clone)]
 pub struct Sparql {
@@ -39,8 +44,10 @@ impl Sparql {
         let wdqs = SparqlClient::with_client(SparqlEndpoint::wdqs(), http.clone()).with_retries(2);
         let client = wdqs.clone().with_max_response_bytes(MAX_JSON_BYTES);
         let bulk = wdqs.with_max_response_bytes(MAX_CSV_BYTES);
+        let retry = RetryPolicy::new(QLEVER_RETRIES)
+            .on_retry(|retry| tracing::info!("QLever failed ({}), retrying in {:?}", retry.error, retry.wait));
         let qlever = SparqlClient::with_client(SparqlEndpoint::qlever_wikidata(), http)
-            .with_retries(1)
+            .with_retry_policy(retry)
             .with_max_response_bytes(MAX_CSV_BYTES);
         Ok(Self { client, bulk, qlever })
     }
