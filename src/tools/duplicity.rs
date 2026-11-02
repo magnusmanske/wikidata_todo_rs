@@ -7,11 +7,12 @@ use super::widar::{self, Login};
 use crate::replicas::{linktarget_ids, placeholders, select_in};
 use crate::state::AppState;
 use crate::tool_db::Database;
-use crate::web::{AppError, Params};
+use crate::web::{AppError, Params, render};
 use crate::wiki::Wiki;
+use askama::Template;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
-use axum::response::{IntoResponse, Json, Response};
+use axum::response::{Html, IntoResponse, Json, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
@@ -45,6 +46,18 @@ pub struct RedirectRequest {
 /// `duplicity.php?wiki=enwiki&page=X` → `/duplicity/#/article/enwiki/X`, as the PHP did.
 pub async fn redirect(Params(request): Params<RedirectRequest>) -> Response {
     widar::redirect(&app_url(&request))
+}
+
+#[derive(Template)]
+#[template(path = "duplicity.html")]
+struct Page {
+    title: &'static str,
+}
+
+/// The app's page, in the look of the other tools; its scripts and styles are
+/// static files, served from the app's directory.
+pub async fn page() -> Result<Html<String>, AppError> {
+    render(&Page { title: "Duplicity" })
 }
 
 fn app_url(request: &RedirectRequest) -> String {
@@ -425,6 +438,13 @@ mod tests {
     #[tokio::test]
     async fn routes() {
         let dir = tempfile::tempdir().unwrap();
+        for path in ["/duplicity/", "/duplicity/index.html"] {
+            let page = get(dir.path(), path).await;
+            assert_eq!(page.status.as_u16(), 200);
+            assert!(page.body.contains("/assets/style.css"), "{path}");
+            assert!(page.body.contains("id=\"app\""), "{path}");
+            assert!(page.body.contains("/duplicity/app.js"), "{path}");
+        }
         let moved = get(dir.path(), "/duplicity.php?wiki=enwiki&norand=1&page=Real%5FPro%5FVolleyball").await;
         assert_eq!(moved.status.as_u16(), 302);
         assert_eq!(moved.headers["location"], "/duplicity/#/article/enwiki/Real_Pro_Volleyball");

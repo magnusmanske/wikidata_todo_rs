@@ -1,6 +1,148 @@
-a { text-decoration: none; }
+/* Duplicity, in the look of the wikidata-todo tools (assets/style.css). */
 
 [v-cloak] { display: none !important; }
+
+/* The article check needs three columns side by side, so it gets more room
+   than a text page: header and footer move with it. */
+body:has(.article-page) main,
+body:has(.article-page) header.site,
+body:has(.article-page) footer.site { max-width: 96rem; }
+
+/* The app's own controls above the view: interface language and login. */
+#app .app-tools {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    color: var(--muted);
+}
+#app .app-tools form { display: flex; align-items: center; gap: 0.25rem; max-width: none; margin: 0; }
+#app .app-tools select { width: auto; padding: 0.15rem 0.35rem; font-size: 0.875rem; }
+#app .app-tools a[href*="tooltranslate"] { font-size: 1.25rem !important; }
+
+/* Links that act as buttons. Element <button>s use the shared button style. */
+#app .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 1.25rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+}
+/* Same border box as `.button.secondary`, so mixed toolbars line up. */
+#app button { border: 1px solid transparent; }
+#app .button:hover { filter: brightness(1.08); }
+#app .button.small, #app button.small { padding: 0.25rem 0.6rem; font-size: 0.875rem; }
+#app .button.secondary, #app button.secondary { background: var(--surface); color: var(--fg); border: 1px solid var(--line); }
+#app .button.danger, #app button.danger { background: var(--danger); color: var(--accent-fg); }
+
+#app .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem; }
+#app .toolbar .hint { margin: 0; }
+#app .fist-pag-bar { margin: 0.5rem 0; }
+
+/* Dropdowns via <details>, so that no Bootstrap JavaScript is needed. */
+#app details.dropdown { position: relative; }
+#app details.dropdown > summary { list-style: none; }
+#app details.dropdown > summary::-webkit-details-marker { display: none; }
+#app details.dropdown > summary::after { content: " ▾"; }
+#app .dropdown-menu {
+    position: absolute;
+    z-index: 20;
+    top: 100%;
+    left: 0;
+    min-width: 12rem;
+    margin-top: 0.25rem;
+    padding: 0.25rem 0;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 0.4rem 1rem rgb(0 0 0 / 0.15);
+}
+#app .dropdown-menu button { display: block; width: 100%; padding: 0.3rem 0.75rem; background: none; color: var(--fg); font-weight: normal; text-align: left; }
+#app .dropdown-menu button:hover { background: var(--surface); }
+
+#app .note { margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+#app .note .hint { margin-left: 0.5rem; }
+#app .badge { display: inline-block; padding: 0.15rem 0.4rem; border-radius: var(--radius); font-size: 0.8125rem; }
+#app .badge.warn { background: #ffc107; color: #212529; }
+
+/* The shared <pagination> component (resources/vue_es6/pagination.js), whose
+   classes live in a "fist-shared.css" that is not part of this tool. */
+.fist-pag-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+.fist-pag-btn {
+    min-width: 2.25rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--accent);
+    line-height: 1.4;
+    cursor: pointer;
+}
+.fist-pag-btn:hover:not(:disabled) { background: var(--surface); }
+.fist-pag-btn:disabled { color: var(--muted); cursor: default; }
+.fist-pag-active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.fist-pag-active:hover { background: var(--accent) !important; }
+.fist-pag-ellipsis { border-color: transparent; color: var(--muted); }
+.fist-pag-info { margin-left: 0.5rem; color: var(--muted); font-size: 0.875rem; white-space: nowrap; }
+
+#app .loading { display: flex; justify-content: center; padding: 2rem 0; }
+#app .spinner {
+    display: inline-block;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 2px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: duplicity-spin 0.8s linear infinite;
+}
+#app .spinner.small { width: 1rem; height: 1rem; }
+@keyframes duplicity-spin { to { transform: rotate(360deg); } }
+
+/* The article check: wiki, search results and Wikidata, side by side. */
+#app .article-toolbar { padding-bottom: 0.6rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--line); }
+#app .article-toolbar .spinner { margin-left: 0.5rem; }
+#app .article-grid { display: grid; grid-template-columns: 5fr 2fr 5fr; gap: 1rem; }
+#app .article-grid > div { display: flex; flex-direction: column; min-width: 0; }
+#app .article-frame {
+    width: 100%;
+    flex: 1;
+    min-height: calc(100vh - 17rem);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+}
+#app .article-search-col { display: flex; flex-direction: column; min-height: 0; }
+#app .article-search { display: flex; gap: 0.25rem; max-width: none; margin: 0 0 0.5rem; }
+#app .article-search input { flex: 1; min-width: 0; padding: 0.25rem 0.5rem; }
+#app .article-search button { padding: 0.25rem 0.5rem; }
+#app .article-search-results {
+    list-style: decimal inside;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    max-height: calc(100vh - 20rem);
+    border-radius: var(--radius);
+}
+#app .article-search-results li { line-height: 1.2; padding: 0.15rem 0.4rem; border-left: 3px solid transparent; border-right: 3px solid transparent; }
+#app .article-search-results li.selected { background: var(--surface); }
+#app .article-search-results li.has_sitelink { border-right-color: #ff4848; }
+#app .article-search-results li.is_disambig { border-left-color: #48ff48; }
+
+@media (max-width: 900px) {
+    #app .article-grid { grid-template-columns: 1fr; }
+    #app .article-frame { min-height: 60vh; }
+}
+
+#app .duplicity-stats-graph { width: 100%; max-width: 940px; height: 500px; }
 
 .duplicity-error-toast-container {
     position: fixed;
@@ -11,74 +153,15 @@ a { text-decoration: none; }
     max-width: 24rem;
 }
 .duplicity-error-toast {
-    pointer-events: auto;
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-    opacity: 0.95;
-    margin-top: 0.5rem;
-}
-
-.article-toolbar .card-body { padding: 0.5rem 0.75rem; }
-
-.article-frame-row { min-height: calc(100vh - 11rem); }
-.article-frame {
-    width: 100%;
-    height: 100%;
-    min-height: calc(100vh - 11rem);
-    border: 1px solid var(--bs-border-color, #ced4da);
-    border-radius: 0.25rem;
-}
-
-.article-search-col { display: flex; flex-direction: column; min-height: 0; }
-.article-search-results {
-    list-style: decimal inside;
-    padding: 0;
-    overflow-y: auto;
-    max-height: calc(100vh - 14rem);
-    border-radius: 0.25rem;
-}
-.article-search-results li { line-height: 1.2; padding: 0.15rem 0.4rem; }
-.article-search-results li.selected { background-color: #ddd; }
-.article-search-results li.has_sitelink { border-right: 3px solid #ff4848 !important; }
-.article-search-results li.is_disambig  { border-left:  3px solid #48ff48 !important; }
-
-.duplicity-stats-graph {
-    width: 100%;
-    max-width: 940px;
-    height: 500px;
-}
-
-/* Styles for the shared <pagination> component (resources/vue_es6/pagination.js),
-   which documents these classes as living in a "fist-shared.css" that is not part
-   of this tool. Kept local until/unless they are upstreamed to the shared lib. */
-.fist-pag-bar {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.25rem;
+    gap: 0.5rem;
+    align-items: flex-start;
+    pointer-events: auto;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--danger);
+    color: var(--accent-fg);
+    border-radius: var(--radius);
+    box-shadow: 0 0.5rem 1rem rgb(0 0 0 / 0.15);
 }
-.fist-pag-btn {
-    min-width: 2.25rem;
-    padding: 0.25rem 0.5rem;
-    border: 1px solid var(--bs-border-color, #ced4da);
-    border-radius: 0.25rem;
-    background: #fff;
-    color: var(--bs-link-color, #0d6efd);
-    line-height: 1.4;
-    cursor: pointer;
-}
-.fist-pag-btn:hover:not(:disabled) { background: #e9ecef; }
-.fist-pag-btn:disabled { color: #adb5bd; cursor: default; }
-.fist-pag-active {
-    background: var(--bs-primary, #0d6efd);
-    border-color: var(--bs-primary, #0d6efd);
-    color: #fff;
-    font-weight: 600;
-}
-.fist-pag-active:hover { background: var(--bs-primary, #0d6efd) !important; }
-.fist-pag-ellipsis { border-color: transparent; color: #6c757d; }
-.fist-pag-info {
-    margin-left: 0.5rem;
-    color: #6c757d;
-    font-size: 0.875rem;
-    white-space: nowrap;
-}
+.duplicity-error-toast .close { padding: 0 0.25rem; background: none; color: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }

@@ -58,7 +58,7 @@ export default {
     data() {
         // paginated defaults to true: the full list can hold >100k rows (#32),
         // so "show all" is an explicit opt-in via the toggle.
-        return { articles: [], loading: true, offset: 0, paginated: true };
+        return { articles: [], loading: true, failed: false, offset: 0, paginated: true };
     },
     computed: {
         perPage() { return PER_PAGE; },
@@ -114,6 +114,7 @@ export default {
         },
         async loadArticles() {
             this.loading = true;
+            this.failed = false;
             this.offset = 0;
             try {
                 const params = { action: 'articles', wiki: this.wiki };
@@ -122,10 +123,12 @@ export default {
                 const j = await apiJson('./api.php', params);
                 if (j.status !== 'OK') {
                     bus.$emit('error', j.status);
+                    this.failed = true;
                     return;
                 }
                 this.articles = j.articles;
             } catch (err) {
+                this.failed = true;
                 bus.$emit('error', `Failed to load articles: ${err.message || err}`);
             } finally {
                 this.loading = false;
@@ -133,39 +136,31 @@ export default {
         },
     },
     template: `
-<div class="container py-3">
+<div>
     <p class="lead" tt="list_blurb" :tt1="wiki"></p>
 
-    <div v-if="excludeCategory !== ''" class="alert alert-secondary py-1 px-2 d-flex justify-content-between align-items-center">
+    <p v-if="excludeCategory !== ''" class="note">
         <span tt="excluding_category" :tt1="excludeCategory.replace(/_/g,' ')"></span>
-        <router-link :to="'/list/'+wiki" class="small" tt="show_all"></router-link>
+        <router-link :to="'/list/'+wiki" class="hint" tt="show_all"></router-link>
+    </p>
+
+    <div v-if="loading" class="loading">
+        <span class="spinner" role="status" aria-label="Loading"></span>
     </div>
 
-    <div v-if="loading" class="text-center my-4">
-        <div class="spinner-border" role="status" aria-hidden="true"></div>
-    </div>
-
-    <div v-else-if="articles.length > 0">
-        <div class="d-flex flex-wrap gap-2 mb-2">
-            <router-link :to="'/article/'+wiki" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-shuffle" aria-hidden="true"></i> <span tt="check_random_article"></span>
-            </router-link>
-            <button type="button" class="btn btn-sm btn-outline-secondary" @click.prevent="togglePaginated">
-                <i class="bi bi-list-ul" aria-hidden="true"></i>
+    <template v-else-if="articles.length > 0">
+        <div class="toolbar">
+            <router-link :to="'/article/'+wiki" class="button small secondary" tt="check_random_article"></router-link>
+            <button type="button" class="small secondary" @click.prevent="togglePaginated">
                 <span v-if="paginated" tt="show_all_rows"></span>
                 <span v-else tt="show_paginated"></span>
             </button>
-            <button type="button" class="btn btn-sm btn-outline-primary" @click.prevent="downloadList('csv')">
-                <i class="bi bi-download" aria-hidden="true"></i> <span tt="download_csv"></span>
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-primary" @click.prevent="downloadList('tsv')">
-                <i class="bi bi-download" aria-hidden="true"></i> <span tt="download_tsv"></span>
-            </button>
+            <button type="button" class="small" @click.prevent="downloadList('csv')" tt="download_csv"></button>
+            <button type="button" class="small" @click.prevent="downloadList('tsv')" tt="download_tsv"></button>
         </div>
 
         <pagination
             v-if="paginated"
-            class="mb-2"
             :offset="offset"
             :items-per-page="perPage"
             :total="articles.length"
@@ -173,38 +168,41 @@ export default {
             @go-to-page="offset = $event"
         ></pagination>
 
-        <table class="table table-hover">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th tt="article"></th>
-                    <th tt="check_article"></th>
-                    <th tt="article_created"></th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr v-for="(a, num) in pagedArticles" :key="'row_'+(offset+num)">
-                    <td>{{offset + num + 1}}</td>
-                    <td>
-                        <a :href="articleUrl(a.title)" target="_blank" class="wikipedia">{{a.title}}</a>
-                    </td>
-                    <td>
-                        <router-link target="_blank" :to="articleRoute(a.title)" tt="check"></router-link>
-                    </td>
-                    <td>{{a.creation_date}}</td>
-                </tr>
-            </tbody>
-        </table>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="num">#</th>
+                        <th tt="article"></th>
+                        <th tt="check_article"></th>
+                        <th tt="article_created"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(a, num) in pagedArticles" :key="'row_'+(offset+num)">
+                        <td class="num">{{offset + num + 1}}</td>
+                        <td>
+                            <a :href="articleUrl(a.title)" target="_blank">{{a.title}}</a>
+                        </td>
+                        <td>
+                            <router-link target="_blank" :to="articleRoute(a.title)" tt="check"></router-link>
+                        </td>
+                        <td>{{a.creation_date}}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
 
         <pagination
             v-if="paginated && articles.length > perPage"
-            class="mt-2"
             :offset="offset"
             :items-per-page="perPage"
             :total="articles.length"
             :show-first-last="true"
             @go-to-page="offset = $event"
         ></pagination>
-    </div>
+    </template>
+
+    <p v-else-if="!failed" class="muted">No candidates at the moment.</p>
 </div>`,
 };

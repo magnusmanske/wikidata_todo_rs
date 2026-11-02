@@ -39,12 +39,14 @@ export default {
                 }
                 this.data = j.data;
                 this.dates = Object.keys(j.data).sort();
-                this.$nextTick(() => this.plot());
             } catch (err) {
                 bus.$emit('error', `Failed to load stats: ${err.message || err}`);
             } finally {
                 this.loading = false;
             }
+            // After the render that creates the graph element (the `return` above
+            // skips this, as there is nothing to plot).
+            if (this.dates.length > 0) this.$nextTick(() => this.plot());
         },
         plot() {
             if (typeof $?.plot !== 'function') {
@@ -63,26 +65,35 @@ export default {
                 ? { transform: (v) => Math.log(v + 1), inverseTransform: (v) => Math.exp(v) - 1, min: 0 }
                 : { min: 0 };
 
+            // Follow the page's theme, as the stylesheet switches with the system.
+            const css = getComputedStyle(document.documentElement);
+            const colour = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
+            const muted = colour('--muted', '#6b6b70');
+            const line = colour('--line', '#e2e2e5');
+            const accent = colour('--accent', '#3657c9');
+
             $.plot('#duplicity_stats_graph', series, {
-                series: { lines: { show: true }, points: { show: true } },
-                xaxis: { ticks: xticks },
-                yaxis,
-                grid: { backgroundColor: { colors: ['#fff', '#eee'] } },
+                series: { lines: { show: true, lineWidth: 1 }, points: { show: true, radius: 2 } },
+                colors: [accent],
+                xaxis: { ticks: xticks, color: muted },
+                yaxis: { ...yaxis, color: muted },
+                grid: { backgroundColor: null, borderColor: line, tickColor: line },
             });
         },
     },
     template: `
-<div class="container py-3">
+<div>
     <p class="lead" tt="stats_blurb" :tt1="wiki"></p>
 
-    <div v-if="loading" class="text-center my-4">
-        <div class="spinner-border" role="status" aria-hidden="true"></div>
+    <div v-if="loading" class="loading">
+        <span class="spinner" role="status" aria-label="Loading"></span>
     </div>
 
-    <div v-show="!loading" class="form-check mb-2">
-        <input class="form-check-input" type="checkbox" id="log-scale-toggle" v-model="logScale">
-        <label class="form-check-label" for="log-scale-toggle">Logarithmic Y axis</label>
-    </div>
-    <div v-show="!loading" id="duplicity_stats_graph" class="duplicity-stats-graph"></div>
+    <template v-else>
+        <label class="check">
+            <input type="checkbox" v-model="logScale"> Logarithmic Y axis
+        </label>
+        <div id="duplicity_stats_graph" class="duplicity-stats-graph"></div>
+    </template>
 </div>`,
 };

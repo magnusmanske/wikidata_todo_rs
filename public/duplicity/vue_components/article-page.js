@@ -176,13 +176,18 @@ export default {
 
         showQ(q) { this.current_q = q; },
 
+        closeDropdown(event) {
+            const dropdown = event.target.closest('details');
+            if (dropdown) dropdown.open = false;
+        },
+
         working(x) {
             this.work_cnt += x ? 1 : -1;
             this.is_working = this.work_cnt > 0;
         },
 
         liClass(q) {
-            const parts = ['list-group-item', 'list-group-item-action'];
+            const parts = [];
             if (q === this.current_q) parts.push('selected');
             const i = this.wd.getItem(q);
             if (i !== undefined) {
@@ -449,104 +454,87 @@ export default {
         },
     },
     template: `
-<div class="container-fluid py-2 article-page">
-    <div class="card mb-3 article-toolbar">
-        <div class="card-body d-flex flex-wrap align-items-center gap-2">
-            <button v-if="!fixed_page" class="btn btn-outline-danger" @click.prevent="skip" tt="skip"></button>
-            <button class="btn btn-outline-primary" @click.prevent="createNewItemFromPage" tt="button_new_item"></button>
+<div class="article-page">
+    <div class="toolbar article-toolbar">
+        <button v-if="!fixed_page" class="small secondary" @click.prevent="skip" tt="skip"></button>
+        <button class="small" @click.prevent="createNewItemFromPage" tt="button_new_item"></button>
 
-            <template v-for="(g, gIdx) in buttons">
-                <button v-if="g.entries.length === 1"
-                    :key="'btn_'+gIdx"
-                    class="btn btn-outline-primary"
-                    @click.prevent="createItemWithP31(g.entries[0].q)"
-                    :tt="g.entries[0].label ? 'button_'+g.entries[0].label : null">
-                    <wd-link v-if="!g.entries[0].label" :item="g.entries[0].q" as_text="1" :language="tt && tt.language"></wd-link>
-                </button>
-                <div v-else :key="'group_'+gIdx" class="btn-group">
-                    <button :id="'btnGroupDrop_'+gIdx" type="button"
-                        class="btn btn-outline-primary dropdown-toggle"
-                        data-bs-toggle="dropdown" aria-expanded="false"
-                        :tt="'group_'+g.label"></button>
-                    <ul class="dropdown-menu" :aria-labelledby="'btnGroupDrop_'+gIdx">
-                        <li v-for="(e, eIdx) in g.entries" :key="'opt_'+gIdx+'_'+eIdx">
-                            <button class="dropdown-item"
-                                @click.prevent="createItemWithP31(e.q)"
-                                :tt="e.label ? 'button_'+e.label : null">
-                                <wd-link v-if="!e.label" :item="e.q" as_text="1" :language="tt && tt.language"></wd-link>
-                            </button>
-                        </li>
-                    </ul>
+        <template v-for="(g, gIdx) in buttons">
+            <button v-if="g.entries.length === 1"
+                :key="'btn_'+gIdx"
+                class="small secondary"
+                @click.prevent="createItemWithP31(g.entries[0].q)"
+                :tt="g.entries[0].label ? 'button_'+g.entries[0].label : null">
+                <wd-link v-if="!g.entries[0].label" :item="g.entries[0].q" as_text="1" :language="tt && tt.language"></wd-link>
+            </button>
+            <details v-else :key="'group_'+gIdx" class="dropdown">
+                <summary class="button small secondary" :tt="'group_'+g.label"></summary>
+                <div class="dropdown-menu">
+                    <button v-for="(e, eIdx) in g.entries" :key="'opt_'+gIdx+'_'+eIdx"
+                        @click.prevent="createItemWithP31(e.q); closeDropdown($event)"
+                        :tt="e.label ? 'button_'+e.label : null">
+                        <wd-link v-if="!e.label" :item="e.q" as_text="1" :language="tt && tt.language"></wd-link>
+                    </button>
                 </div>
-            </template>
+            </details>
+        </template>
 
-            <div v-if="wiki === 'specieswiki'" class="btn-group">
-                <button id="btnGroupDrop_taxon" type="button"
-                    class="btn btn-outline-primary dropdown-toggle"
-                    data-bs-toggle="dropdown" aria-expanded="false"
-                    tt="group_taxon"></button>
-                <ul class="dropdown-menu" aria-labelledby="btnGroupDrop_taxon">
-                    <li v-for="q in species_group" :key="'taxon_'+q">
-                        <button class="dropdown-item" @click.prevent="createItemWithTaxon(q)">
-                            <wd-link :item="q" as_text="1" :language="tt && tt.language"></wd-link>
-                        </button>
-                    </li>
-                    <li>
-                        <button class="dropdown-item" @click.prevent="createItemWithHerbarium">
-                            <wd-link item="Q181916" as_text="1" :language="tt && tt.language"></wd-link>
-                        </button>
-                    </li>
-                </ul>
+        <details v-if="wiki === 'specieswiki'" class="dropdown">
+            <summary class="button small secondary" tt="group_taxon"></summary>
+            <div class="dropdown-menu">
+                <button v-for="q in species_group" :key="'taxon_'+q"
+                    @click.prevent="createItemWithTaxon(q); closeDropdown($event)">
+                    <wd-link :item="q" as_text="1" :language="tt && tt.language"></wd-link>
+                </button>
+                <button @click.prevent="createItemWithHerbarium(); closeDropdown($event)">
+                    <wd-link item="Q181916" as_text="1" :language="tt && tt.language"></wd-link>
+                </button>
             </div>
+        </details>
 
-            <template v-if="pending_sitelink">
-                <span v-if="pending_sitelink.already_linked"
-                    class="badge bg-warning text-dark ms-2"
-                    tt="sitelink_will_change" :tt1="wiki"></span>
-                <span class="ms-2 text-muted" tt="sitelink_pending" :tt1="sitelink_seconds"></span>
-                <button class="btn btn-danger btn-sm ms-1"
-                    @click.prevent="cancelSitelink" tt="cancel"></button>
-            </template>
-            <button v-else-if="current_q" class="btn btn-outline-success ms-2"
-                @click.prevent="requestAddToCurrentQ" tt="add" :tt1="current_q"></button>
+        <template v-if="pending_sitelink">
+            <span v-if="pending_sitelink.already_linked" class="badge warn"
+                tt="sitelink_will_change" :tt1="wiki"></span>
+            <span class="hint" tt="sitelink_pending" :tt1="sitelink_seconds"></span>
+            <button class="small danger" @click.prevent="cancelSitelink" tt="cancel"></button>
+        </template>
+        <button v-else-if="current_q" class="small"
+            @click.prevent="requestAddToCurrentQ" tt="add" :tt1="current_q"></button>
 
-            <span v-if="loggedIn" class="ms-3 text-muted small">
-                [<a :href="contributionsUrl" target="_blank" class="wikidata" tt="your_last_edits"></a>]
-                <span v-if="last_created_item_q">
-                    [<wd-link :item="last_created_item_q"></wd-link>]
-                </span>
+        <span v-if="loggedIn" class="hint">
+            [<a :href="contributionsUrl" target="_blank" tt="your_last_edits"></a>]
+            <span v-if="last_created_item_q">
+                [<wd-link :item="last_created_item_q"></wd-link>]
             </span>
+        </span>
 
-            <span v-if="is_working" class="ms-3" role="status">
-                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-            </span>
-        </div>
+        <span v-if="is_working" class="spinner small" role="status" aria-label="Working"></span>
     </div>
 
-    <div class="row article-frame-row">
-        <div class="col-md-5">
-            <div v-if="already_used" class="alert alert-primary py-2" role="alert" tt="already_linked"></div>
-            <iframe v-if="page" :src="wikiUrl" class="article-frame"></iframe>
+    <div class="article-grid">
+        <div>
+            <p v-if="already_used" class="note" tt="already_linked"></p>
+            <iframe v-if="page" :src="wikiUrl" :title="page" class="article-frame"></iframe>
         </div>
 
-        <div class="col-md-2 article-search-col">
-            <form class="d-flex mb-2" @submit.prevent="search">
-                <input class="form-control form-control-sm" type="text" v-model="search_query" />
-                <button class="btn btn-sm btn-outline-secondary ms-1" type="submit" aria-label="Search">🔍</button>
+        <div class="article-search-col">
+            <form class="article-search" @submit.prevent="search">
+                <input type="text" v-model="search_query" aria-label="Search" />
+                <button class="small secondary" type="submit">🔍</button>
             </form>
-            <div v-if="no_search_results" class="text-muted small"><i tt="no_search_results"></i></div>
-            <ol v-else class="list-group list-group-flush article-search-results">
+            <p v-if="no_search_results" class="hint"><i tt="no_search_results"></i></p>
+            <ol v-else class="article-search-results">
                 <li v-for="q in search_results" :class="liClass(q)" :key="'li_'+q">
                     <a href="#" @click.prevent="showQ(q)">
                         <small><wd-link :item="q" as_text="1"></wd-link></small>
                     </a>
-                    <a :href="'https://www.wikidata.org/wiki/'+q" target="_blank" class="wikidata">🔗</a>
+                    <a :href="'https://www.wikidata.org/wiki/'+q" target="_blank">🔗</a>
                 </li>
             </ol>
         </div>
 
-        <div class="col-md-5">
-            <iframe v-if="current_q" :src="wikidataUrl" class="article-frame"></iframe>
+        <div>
+            <iframe v-if="current_q" :src="wikidataUrl" :title="current_q" class="article-frame"></iframe>
         </div>
     </div>
 </div>`,

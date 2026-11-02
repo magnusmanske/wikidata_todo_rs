@@ -1,6 +1,5 @@
-import { setToolName, setWd, setWidarApiUrl } from '../resources/vue_es6/state.js';
+import { setToolName, setWd, setWidarApiUrl, state } from '../resources/vue_es6/state.js';
 import { initToolTranslate } from '../resources/vue_es6/tool-translate.js';
-import ToolNavbar from '../resources/vue_es6/tool-navbar.js';
 import Widar from '../resources/vue_es6/widar.js';
 import WdLink from '../resources/vue_es6/wd-link.js';
 
@@ -11,7 +10,6 @@ import ListPage from './vue_components/list-page.js';
 import StatsPage from './vue_components/stats-page.js';
 import CategoriesPage from './vue_components/categories-page.js';
 
-Vue.component('tool-navbar', ToolNavbar);
 Vue.component('widar', Widar);
 Vue.component('wd-link', WdLink);
 
@@ -19,7 +17,10 @@ setToolName('duplicity');
 setWd(getWd());
 setWidarApiUrl('./api.php');
 
-await initToolTranslate('duplicity');
+const tt = await initToolTranslate('duplicity', {
+    // Vue does not re-render on a language change, so re-translate the DOM.
+    onLanguageChange: () => state.tt?.updateInterface(document.body),
+});
 
 const router = new VueRouter({
     routes: [
@@ -36,6 +37,12 @@ const router = new VueRouter({
 new Vue({
     router,
     data: { errors: [] },
+    computed: {
+        userName() { return state.widar?.userinfo?.name ?? ''; },
+        userUrl() {
+            return `https://www.wikidata.org/wiki/User:${encodeURIComponent(this.userName.replace(/ /g, '_'))}`;
+        },
+    },
     created() {
         bus.$on('error', this.onError);
     },
@@ -47,3 +54,14 @@ new Vue({
         dismissError(idx) { this.errors.splice(idx, 1); },
     },
 }).$mount('#app');
+
+// After mounting, so that the listener on the language select survives Vue's
+// compilation of the page's markup.
+tt.addILdropdown('#tooltranslate_wrapper');
+
+// A click anywhere else closes an open toolbar dropdown.
+document.addEventListener('click', (event) => {
+    for (const dropdown of document.querySelectorAll('details.dropdown[open]')) {
+        if (!dropdown.contains(event.target)) dropdown.open = false;
+    }
+});

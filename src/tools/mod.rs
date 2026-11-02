@@ -126,7 +126,13 @@ const ALSO_AT_OLD_ADDRESS: &[&str] =
     &["get_item_names", "pagepile2kml", "related_properties", "resolver", "sparql_rc", "user_edits"];
 
 pub fn routes() -> Router<State> {
-    let router = Router::new().route("/", get(index::handler)).route("/index.php", get(index::handler));
+    // The Duplicity app keeps its files, but its page is rendered here so that
+    // it has the shared header, footer and stylesheet.
+    let router = Router::new()
+        .route("/", get(index::handler))
+        .route("/index.php", get(index::handler))
+        .route("/duplicity/", get(duplicity::page))
+        .route("/duplicity/index.html", get(duplicity::page));
     let router = pages().into_iter().fold(router, |router, (name, handler)| {
         let handler = counted(name, handler);
         let path = format!("/{name}/");

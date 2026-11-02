@@ -29,38 +29,40 @@ export default {
         },
     },
     template: `
-<div class="container py-3">
+<div>
     <p class="lead" tt="main_page_blurb"></p>
     <p tt="main_page_sub"></p>
 
-    <div v-if="loading" class="text-center my-4">
-        <div class="spinner-border" role="status" aria-hidden="true"></div>
+    <div v-if="loading" class="loading">
+        <span class="spinner" role="status" aria-label="Loading"></span>
     </div>
 
     <div v-else-if="wikis.length > 0">
         <h2 tt="available_wikis"></h2>
-        <table class="table table-hover">
-            <thead>
-                <tr>
-                    <th tt="wiki"></th>
-                    <th tt="show_table_header"></th>
-                    <th tt="random_article"></th>
-                    <th class="text-end" tt="articles_without_items"></th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr v-for="w in wikis" :key="w.wiki">
-                    <th>{{w.wiki}}</th>
-                    <td>
-                        <router-link :to="'/list/'+w.wiki" tt="show_list"></router-link> |
-                        <router-link :to="'/stats/'+w.wiki" tt="show_stats"></router-link> |
-                        <router-link :to="'/categories/'+w.wiki" tt="show_categories"></router-link>
-                    </td>
-                    <td><router-link :to="'/article/'+w.wiki" tt="check_random_article"></router-link></td>
-                    <td class="text-end font-monospace">{{w.cnt}}</td>
-                </tr>
-            </tbody>
-        </table>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th tt="wiki"></th>
+                        <th tt="show_table_header"></th>
+                        <th tt="random_article"></th>
+                        <th class="num" tt="articles_without_items"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="w in wikis" :key="w.wiki">
+                        <td>{{w.wiki}}</td>
+                        <td>
+                            <router-link :to="'/list/'+w.wiki" tt="show_list"></router-link> ·
+                            <router-link :to="'/stats/'+w.wiki" tt="show_stats"></router-link> ·
+                            <router-link :to="'/categories/'+w.wiki" tt="show_categories"></router-link>
+                        </td>
+                        <td><router-link :to="'/article/'+w.wiki" tt="check_random_article"></router-link></td>
+                        <td class="num">{{w.cnt}}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>`,
 };

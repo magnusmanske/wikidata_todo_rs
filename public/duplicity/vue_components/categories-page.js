@@ -49,36 +49,38 @@ export default {
         },
     },
     template: `
-<div class="container py-3">
+<div>
     <p class="lead" tt="category_blurb" :tt1="wiki"></p>
 
-    <div v-if="loading" class="text-center my-4">
-        <div class="spinner-border" role="status" aria-hidden="true"></div>
+    <div v-if="loading" class="loading">
+        <span class="spinner" role="status" aria-label="Loading"></span>
     </div>
 
-    <table v-else-if="categories.length > 0" class="table table-hover">
-        <thead>
-            <tr>
-                <th tt="category"></th>
-                <th class="text-end" tt="number_of_articles"></th>
-                <th>PetScan</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr v-for="(c, idx) in categories" :key="'cat_'+idx">
-                <td>
-                    <router-link :to="'/list/'+wiki+'/'+encodeURIComponent(c[0])">
-                        {{c[0].replace(/_/g,' ')}}
-                    </router-link>
-                    <router-link :to="{path: '/list/'+wiki, query: {exclude: c[0]}}"
-                        class="small ms-2 text-muted" tt="exclude_from_list"></router-link>
-                </td>
-                <td class="text-end font-monospace">{{c[1]}}</td>
-                <td class="text-end">
-                    <a :href="petscanUrl(c[0])" target="_blank" rel="noopener">PetScan</a>
-                </td>
-            </tr>
-        </tbody>
-    </table>
+    <div v-else-if="categories.length > 0" class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th tt="category"></th>
+                    <th class="num" tt="number_of_articles"></th>
+                    <th>PetScan</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="(c, idx) in categories" :key="'cat_'+idx">
+                    <td>
+                        <router-link :to="'/list/'+wiki+'/'+encodeURIComponent(c[0])">
+                            {{c[0].replace(/_/g,' ')}}
+                        </router-link>
+                        <router-link :to="{path: '/list/'+wiki, query: {exclude: c[0]}}"
+                            class="hint" tt="exclude_from_list"></router-link>
+                    </td>
+                    <td class="num">{{c[1]}}</td>
+                    <td class="num">
+                        <a :href="petscanUrl(c[0])" target="_blank" rel="noopener">PetScan</a>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 </div>`,
 };
