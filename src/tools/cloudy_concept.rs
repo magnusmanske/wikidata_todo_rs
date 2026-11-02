@@ -2,6 +2,7 @@
 //! Wikipedia articles link to, by item, and which of these items lack a
 //! label in a language; with a way to add one (via Widar).
 
+use crate::cache::KeyedCache;
 use crate::mediawiki;
 use crate::state::AppState;
 use crate::terms::{self, TermType};
@@ -15,6 +16,7 @@ use futures::{StreamExt, stream};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use wikimisc::mysql_async::prelude::Queryable;
 
 /// Wikis asked at a time.
@@ -23,6 +25,11 @@ const CONCURRENCY: usize = 6;
 const MAX_REQUESTS: usize = 10;
 /// A label for all languages; an item with one has a label in every language.
 const MUL: &str = "mul";
+
+/// Built clouds, by item and languages, for a while: a page links to many
+/// more, so the same item is often asked for again, and each build is costly.
+/// A cloud can be large, so only a few are kept.
+static CLOUDS: KeyedCache<Cloud> = KeyedCache::new(Duration::from_secs(600), 64);
 
 #[derive(Debug, Deserialize)]
 pub struct Request {
@@ -60,7 +67,7 @@ struct Page {
     q: String,
     lang: String,
     fallback: String,
-    cloud: Option<Cloud>,
+    cloud: Option<Arc<Cloud>>,
 }
 
 pub async fn handler(
@@ -86,10 +93,12 @@ pub async fn handler(
     };
     if !request.q.trim().is_empty() {
         let q = q.ok_or_else(|| AppError::BadRequest("invalid item".into()))?;
-        let mut languages: Vec<&str> = vec![&page.lang];
-        languages.extend(fallbacks.iter().map(String::as_str));
-        languages.push(MUL);
-        page.cloud = Some(cloud(&state, &q, &languages).await?);
+        let mut languages: Vec<String> = vec![page.lang.clone()];
+        languages.extend(fallbacks.iter().cloned());
+        languages.push(MUL.to_string());
+        let key = format!("{}|{}", q, languages.join(","));
+        let languages: Vec<&str> = languages.iter().map(String::as_str).collect();
+        page.cloud = Some(CLOUDS.get_or_fetch(&key, async || cloud(&state, &q, &languages).await).await?);
     }
     render(&page)
 }

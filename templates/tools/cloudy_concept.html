@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block head %}<meta name="robots" content="noindex,nofollow">{% endblock %}
 {% block content %}
 <p class="lead">Unlabeled items in your language around an item: the pages its Wikipedia articles link to, and their items.</p>
 <form method="get" action="/cloudy_concept/">
@@ -28,7 +29,7 @@ Adding labels needs a <a href="/api.php?action=authorize">Widar login</a>.</p>
 {% for row in cloud.rows %}
   <tr class="{% if row.label.is_some() %}exists{% else %}missing{% endif %}">
     <td><a href="https://www.wikidata.org/wiki/{{ row.item }}">{{ row.item }}</a>
-      <span class="hint"><a href="/cloudy_concept/?q={{ row.item }}&amp;lang={{ lang }}&amp;fallback={{ fallback }}" title="Concept cloud of this item">cloud</a> ·
+      <span class="hint"><a href="/cloudy_concept/?q={{ row.item }}&amp;lang={{ lang }}&amp;fallback={{ fallback }}" rel="nofollow" title="Concept cloud of this item">cloud</a> ·
       <a href="https://reasonator.toolforge.org/?q={{ row.item }}&amp;lang={{ lang }}">Reasonator</a></span></td>
     <td>{% match row.label %}{% when Some((label, language)) %}{{ label }}{% if let Some(language) = language %} <span class="muted">[{{ language }}]</span>{% endif %}
       {% when None %}<span class="error">No label</span> <button type="button" class="link" data-q="{{ row.item }}" data-suggestion="{{ row.suggestion() }}">add</button>{% endmatch %}</td>
