@@ -9,21 +9,27 @@ use crate::web::{AppError, Params, render};
 use crate::wiki::Wiki;
 use crate::wikidata::parse_id;
 use askama::Template;
+use axum::Json;
 use axum::body::{Body, Bytes};
 use axum::extract::State;
 use axum::http::{Uri, header};
 use axum::response::{IntoResponse, Response};
 use futures::StreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
+use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
 /// Bytes per piece of the streamed response.
 const PIECE: usize = 64 * 1024;
 /// Ends a list that the query service cut short.
 const INCOMPLETE: &str = "#ERROR: the query service stopped early; this list is incomplete\n";
+/// How long the target list is used before it is fetched again.
+const KEEP_FOR: Duration = Duration::from_secs(24 * 3600);
+/// The target list, kept on disk so that a restart does not cost the query.
+const TARGETS_FILE: &str = "beacon_targets.json";
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
@@ -40,7 +46,7 @@ impl Default for Request {
 }
 
 /// A property that BEACON files can map to or from.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Target {
     /// `P214`; empty for Wikidata itself.
     id: String,
@@ -55,14 +61,20 @@ impl Target {
     }
 }
 
-static TARGETS: TimedCache<Vec<Target>> = TimedCache::new(Duration::from_secs(24 * 3600));
+static TARGETS: TimedCache<Vec<Target>> = TimedCache::new(KEEP_FOR);
 
 #[derive(Template)]
 #[template(path = "tools/beacon.html")]
 struct Page<'a> {
     title: &'static str,
     request: &'a Request,
-    targets: &'a [Target],
+}
+
+/// An entry of the form's autocomplete list.
+#[derive(Serialize)]
+struct Choice<'a> {
+    id: &'a str,
+    name: &'a str,
 }
 
 pub async fn handler(
@@ -74,11 +86,10 @@ pub async fn handler(
         "" => None,
         site => Some(Wiki::from_dbname(&site.to_lowercase())?),
     };
-    let targets = TARGETS.get_or_fetch(async || targets(&state.sparql).await).await?;
     if request.prop.trim().is_empty() {
-        let page = Page { title: "Wikidata BEACON", request: &request, targets: &targets };
-        return Ok(render(&page)?.into_response());
+        return Ok(render(&Page { title: "Wikidata BEACON", request: &request })?.into_response());
     }
+    let targets = targets(&state).await?;
     let find = |input: &str| {
         let id = parse_id(input, 'P')?;
         targets.iter().find(|t| t.id == id).cloned()
@@ -98,8 +109,34 @@ pub async fn handler(
         .into_response())
 }
 
+/// The form's autocomplete, loaded after the page is shown: the list has
+/// thousands of properties and takes a while to query.
+pub async fn choices(State(state): State<Arc<AppState>>) -> Result<Response, AppError> {
+    let targets = targets(&state).await?;
+    let choices: Vec<Choice> = targets.iter().map(|t| Choice { id: &t.id, name: &t.name }).collect();
+    let cache = format!("public, max-age={}", KEEP_FOR.as_secs());
+    Ok(([(header::CACHE_CONTROL, cache)], Json(choices)).into_response())
+}
+
+/// The target list from the cache, the file kept across restarts, or the query service.
+async fn targets(state: &AppState) -> anyhow::Result<Arc<Vec<Target>>> {
+    TARGETS
+        .get_or_fetch(async move || {
+            let path = state.config.data_dir.join(TARGETS_FILE);
+            if let Some(targets) = read_targets(&path).await {
+                return Ok(targets);
+            }
+            let targets = fetch_targets(&state.sparql).await?;
+            if let Err(e) = write_targets(&path, &targets).await {
+                tracing::warn!("beacon: cannot keep the target list in {}: {e:#}", path.display());
+            }
+            Ok(targets)
+        })
+        .await
+}
+
 /// Properties of external identifiers, or with a formatter URL; by name.
-async fn targets(sparql: &Sparql) -> anyhow::Result<Vec<Target>> {
+async fn fetch_targets(sparql: &Sparql) -> anyhow::Result<Vec<Target>> {
     let query = "SELECT ?p ?label ?url { { ?p wikibase:propertyType wikibase:ExternalId } UNION { ?p wdt:P1630 [] }
         ?p rdfs:label ?label FILTER(LANG(?label) = \"en\") OPTIONAL { ?p wdt:P1630 ?url } }";
     let json = sparql.json(query).await?;
@@ -120,6 +157,33 @@ async fn targets(sparql: &Sparql) -> anyhow::Result<Vec<Target>> {
     }
     targets.sort_by_cached_key(|t| t.name.to_lowercase());
     Ok(targets)
+}
+
+/// The target list as saved by [`write_targets`].
+#[derive(Deserialize, Serialize)]
+struct SavedTargets {
+    /// When it was fetched, in seconds since the Unix epoch.
+    fetched: u64,
+    targets: Vec<Target>,
+}
+
+/// The saved target list, if there is one and it is fresh.
+async fn read_targets(path: &Path) -> Option<Vec<Target>> {
+    let saved: SavedTargets = serde_json::from_slice(&tokio::fs::read(path).await.ok()?).ok()?;
+    (now().saturating_sub(saved.fetched) < KEEP_FOR.as_secs()).then_some(saved.targets)
+}
+
+/// Replaces `path` at once, so that a reader never sees half a file.
+async fn write_targets(path: &Path, targets: &[Target]) -> anyhow::Result<()> {
+    let saved = SavedTargets { fetched: now(), targets: targets.to_vec() };
+    let tmp = path.with_extension("tmp");
+    tokio::fs::write(&tmp, serde_json::to_vec(&saved)?).await?;
+    tokio::fs::rename(&tmp, path).await?;
+    Ok(())
+}
+
+fn now() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or_default()
 }
 
 /// A formatter URL without its final `$1` (and any slashes after it).
@@ -270,6 +334,26 @@ mod tests {
         // Safe: a body may be polled again after its stream ended. Without
         // `fuse`, `unfold` panicked here (seen from the compression layer).
         assert!(pieces.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn saved_targets_are_reused_until_stale() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(TARGETS_FILE);
+        assert!(read_targets(&path).await.is_none());
+        write_targets(&path, &[viaf()]).await.unwrap();
+        assert_eq!(read_targets(&path).await, Some(vec![viaf()]));
+        let stale = SavedTargets { fetched: now().saturating_sub(KEEP_FOR.as_secs()), targets: vec![viaf()] };
+        tokio::fs::write(&path, serde_json::to_vec(&stale).unwrap()).await.unwrap();
+        assert!(read_targets(&path).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn blank_page_needs_no_query() {
+        let dir = tempfile::tempdir().unwrap();
+        let page = get(dir.path(), "/beacon/").await;
+        assert_eq!(page.status.as_u16(), 200);
+        assert!(page.body.contains("name=\"prop\""));
     }
 
     #[tokio::test]

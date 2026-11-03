@@ -135,7 +135,9 @@ pub fn routes() -> Router<State> {
         .route("/duplicity/", get(duplicity::page))
         .route("/duplicity/index.html", get(duplicity::page))
         .route("/graveyard_shift/", get(graveyard_shift::page))
-        .route("/graveyard_shift/index.html", get(graveyard_shift::page));
+        .route("/graveyard_shift/index.html", get(graveyard_shift::page))
+        // The BEACON form loads its (large) autocomplete list after the page.
+        .route("/beacon/targets.json", counted("beacon", get(beacon::choices)));
     let router = pages().into_iter().fold(router, |router, (name, handler)| {
         let handler = counted(name, handler);
         let path = format!("/{name}/");

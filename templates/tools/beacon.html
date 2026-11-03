@@ -20,8 +20,20 @@ The largest properties (hundreds of thousands of IDs) may be too much for the qu
   <button>Get translations</button>
 </form>
 
-<datalist id="properties">
-{% for target in targets %}<option value="{{ target.id }}">{{ target.name }}</option>
-{% endfor %}
-</datalist>
+<datalist id="properties"></datalist>
+<script>
+// Thousands of properties: load them after the page is shown, so it is not delayed.
+fetch('/beacon/targets.json')
+  .then(response => response.json())
+  .then(targets => {
+    const list = document.getElementById('properties');
+    for (const {id, name} of targets) {
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = name;
+      list.append(option);
+    }
+  })
+  .catch(() => {});
+</script>
 {% endblock %}
