@@ -2,7 +2,7 @@
 
 use crate::wiki::UnknownWiki;
 use askama::Template;
-use axum::http::StatusCode;
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 
 #[derive(Debug, thiserror::Error)]
@@ -20,6 +20,10 @@ pub enum AppError {
     Upstream(#[from] anyhow::Error),
     #[error("{0}")]
     Internal(String),
+    /// Too much expensive work is in flight. Not a server failure, but a
+    /// request to come back later.
+    #[error("too many requests")]
+    TooManyRequests,
 }
 
 impl From<UnknownWiki> for AppError {
@@ -52,11 +56,30 @@ impl IntoResponse for AppError {
                 tracing::error!("internal error: {e}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong on our side.")
             }
+            Self::TooManyRequests => {
+                (StatusCode::TOO_MANY_REQUESTS, "This tool is busy with other requests. Please try again in a minute.")
+            }
         };
         let title = status.canonical_reason().unwrap_or("Error");
-        match (ErrorPage { title, message }).render() {
+        let mut response = match (ErrorPage { title, message }).render() {
             Ok(html) => (status, Html(html)).into_response(),
             Err(_) => (status, message.to_string()).into_response(),
+        };
+        if matches!(self, Self::TooManyRequests) {
+            response.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from_static("60"));
         }
+        response
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn too_many_requests_asks_to_retry() {
+        let response = AppError::TooManyRequests.into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.headers()[header::RETRY_AFTER], "60");
     }
 }

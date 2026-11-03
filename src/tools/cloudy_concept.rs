@@ -15,8 +15,9 @@ use axum::response::Html;
 use futures::{StreamExt, stream};
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
+use tokio::sync::Semaphore;
 use wikimisc::mysql_async::prelude::Queryable;
 
 /// Wikis asked at a time.
@@ -30,6 +31,14 @@ const MUL: &str = "mul";
 /// more, so the same item is often asked for again, and each build is costly.
 /// A cloud can be large, so only a few are kept.
 static CLOUDS: KeyedCache<Cloud> = KeyedCache::new(Duration::from_secs(600), 64);
+
+/// Builds running at once. One build makes hundreds of wiki API calls and
+/// takes several seconds; unbounded, a crawler following the cloud links
+/// starved the shared replica pool, and every build failed.
+const MAX_BUILDS: usize = 4;
+/// How long a request waits for a free build slot before being told to retry.
+const BUILD_WAIT: Duration = Duration::from_secs(2);
+static BUILDS: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(MAX_BUILDS));
 
 #[derive(Debug, Deserialize)]
 pub struct Request {
@@ -98,7 +107,18 @@ pub async fn handler(
         languages.push(MUL.to_string());
         let key = format!("{}|{}", q, languages.join(","));
         let languages: Vec<&str> = languages.iter().map(String::as_str).collect();
-        page.cloud = Some(CLOUDS.get_or_fetch(&key, async || cloud(&state, &q, &languages).await).await?);
+        page.cloud = Some(
+            CLOUDS
+                .get_or_fetch(&key, async || {
+                    // Taken only on a cache miss, and held for the whole build.
+                    let _slot = tokio::time::timeout(BUILD_WAIT, BUILDS.acquire())
+                        .await
+                        .map_err(|_| AppError::TooManyRequests)?
+                        .map_err(|_| AppError::TooManyRequests)?;
+                    cloud(&state, &q, &languages).await
+                })
+                .await?,
+        );
     }
     render(&page)
 }
