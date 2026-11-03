@@ -52,7 +52,8 @@ pub async fn handler(
         let text = lines(&state, &chunk).await?;
         anyhow::Ok(Some((Bytes::from(text), (reader, seen, state))))
     });
-    let body = stream::once(async { Ok(Bytes::from_static(HEADER.as_bytes())) }).chain(rows.into_stream());
+    // Fused: a body may be polled again after it ended.
+    let body = stream::once(async { Ok(Bytes::from_static(HEADER.as_bytes())) }).chain(rows.into_stream()).fuse();
     Ok(([(header::CONTENT_TYPE, "text/plain; charset=utf-8")], Body::from_stream(body)).into_response())
 }
 

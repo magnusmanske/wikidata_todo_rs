@@ -124,7 +124,8 @@ pub async fn handler(
         }
         let _ = tx.send(tail).await;
     });
-    let body = Body::from_stream(rx.map(|s| Ok::<_, std::convert::Infallible>(Bytes::from(s))));
+    // Fused: a body may be polled again after it ended.
+    let body = Body::from_stream(rx.map(|s| Ok::<_, std::convert::Infallible>(Bytes::from(s))).fuse());
     Ok(([(header::CONTENT_TYPE, "text/html; charset=utf-8")], body).into_response())
 }
 

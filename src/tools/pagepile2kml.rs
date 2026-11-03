@@ -72,7 +72,8 @@ pub async fn handler(
     let body = stream::once(async move { kml_head(id) })
         .chain(placemarks)
         .chain(stream::once(async { "\n</Document>\n</kml>\n".to_string() }))
-        .map(Ok::<_, std::convert::Infallible>);
+        .map(Ok::<_, std::convert::Infallible>)
+        .fuse();
     Ok((
         [
             (header::CONTENT_TYPE, "application/xml; charset=UTF-8"),

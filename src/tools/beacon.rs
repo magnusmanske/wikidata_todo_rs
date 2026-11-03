@@ -13,6 +13,7 @@ use axum::body::{Body, Bytes};
 use axum::extract::State;
 use axum::http::{Uri, header};
 use axum::response::{IntoResponse, Response};
+use futures::StreamExt;
 use serde::Deserialize;
 use std::fs::File;
 use std::sync::Arc;
@@ -178,10 +179,17 @@ fn stream(head: String, mut reader: csv::Reader<File>, with_source: bool) -> Bod
         }
         let _ = sender.blocking_send(Bytes::from(piece));
     });
-    let pieces = futures::stream::unfold(receiver, |mut receiver| async move {
+    Body::from_stream(pieces(receiver))
+}
+
+/// The body's chunks, fused: a body may be polled again after it ended,
+/// e.g. by the compression layer looking for trailers, and `unfold` panics
+/// on that.
+fn pieces(receiver: mpsc::Receiver<Bytes>) -> impl futures::Stream<Item = Result<Bytes, std::io::Error>> {
+    futures::stream::unfold(receiver, |mut receiver| async move {
         receiver.recv().await.map(|piece| (Ok::<_, std::io::Error>(piece), receiver))
-    });
-    Body::from_stream(pieces)
+    })
+    .fuse()
 }
 
 /// A BEACON line for a result row (`item, ext1[, ext2]`): `Q42||ext1`, or
@@ -251,6 +259,17 @@ mod tests {
         assert_eq!(line(&record(&[item, "1", "x"]), true), Ok(Some("x|Q42|1\n".to_string())));
         assert_eq!(line(&record(&[item, "http://www.wikidata.org/.well-known/genid/abc"]), false), Ok(None));
         assert_eq!(line(&record(&["\tat java.lang.Thread.run(Thread.java:750)"]), false), Err(()));
+    }
+
+    #[tokio::test]
+    async fn pieces_can_be_polled_after_the_end() {
+        let (sender, receiver) = mpsc::channel(1);
+        drop(sender);
+        let mut pieces = Box::pin(pieces(receiver));
+        assert!(pieces.next().await.is_none());
+        // Safe: a body may be polled again after its stream ended. Without
+        // `fuse`, `unfold` panicked here (seen from the compression layer).
+        assert!(pieces.next().await.is_none());
     }
 
     #[tokio::test]

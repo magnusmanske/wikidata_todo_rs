@@ -79,9 +79,12 @@ where
         send(&sender, Ok(Bytes::from(buffer))).await;
     });
     has_started.await.map_err(|_| AppError::Internal("query task ended".to_string()))??;
+    // Fused: a body may be polled again after it ended, e.g. by the compression
+    // layer looking for trailers, and `unfold` panics on that.
     let chunks = futures::stream::unfold(receiver, |mut receiver| async move {
         receiver.recv().await.map(|chunk| (chunk, receiver))
-    });
+    })
+    .fuse();
     Ok(Body::from_stream(chunks))
 }
 
