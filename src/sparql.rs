@@ -25,6 +25,11 @@ const MAX_CSV_BYTES: usize = 2 * 1024 * 1024 * 1024;
 /// answers 429 while it is busy; the next attempt, a few seconds later, usually
 /// succeeds. Four retries wait 1, 2, 4 and 8 seconds.
 const QLEVER_RETRIES: u32 = 4;
+/// QLever's web interface predeclares the Wikidata prefixes; its API does not,
+/// and rejects a query that uses them without declaring them.
+const QLEVER_PREFIXES: &str = "PREFIX wd: <http://www.wikidata.org/entity/>\n\
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n\
+PREFIX wikibase: <http://wikiba.se/ontology#>\n";
 
 #[derive(Debug, Clone)]
 pub struct Sparql {
@@ -69,9 +74,16 @@ impl Sparql {
             Ok(reader) => Ok(reader),
             Err(e) => {
                 tracing::info!("WDQS failed ({e}), trying QLever");
-                self.qlever.query_csv(query).await.context("SPARQL query failed on WDQS and QLever")
+                self.qlever_csv(query).await.context("SPARQL query failed on WDQS and QLever")
             }
         }
+    }
+
+    /// From QLever only: for job queries that WDQS cannot finish in time, where
+    /// data a little older is no problem.
+    pub async fn qlever_csv(&self, query: &str) -> Result<csv::Reader<File>> {
+        let query = format!("{QLEVER_PREFIXES}{query}");
+        self.qlever.query_csv(&query).await.context("SPARQL query failed on QLever")
     }
 
     /// The first `limit` entity IDs (`Q42`, `P31`, `L1`, …) in variable

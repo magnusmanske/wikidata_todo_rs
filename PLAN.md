@@ -10,7 +10,7 @@ database connections, askama templates, one stylesheet.
 - Server-rendered tools share the new look. The Vue apps (Duplicity, Relator, Relator2, Graveyard shift, Papertrail) keep their interface; their files moved into this repository (`public/`, built into the binary), their APIs are ported. Other static files (pages, scripts, data) are served from the PHP checkout as they are.
 - Tools that broke (WDQ, `wb_terms`, `revision_compat`, removed columns) are fixed where still useful, else retired.
 - Jobs that feed live tools are ported; dead ones retired. The Wikispecies bot is ported too; it runs as a dry run beside the PHP one until its log has been checked.
-- Labels come from the term store (`wbt_*`, own server), never the frozen copies in the main database; the tools' own SPARQL avoids what WDQS's successor (QLever) lacks. Heavy job queries fall back to QLever when WDQS times out.
+- Labels come from the term store (`wbt_*`, own server), never the frozen copies in the main database; the tools' own SPARQL avoids what WDQS's successor (QLever) lacks. Heavy job queries use QLever: directly where WDQS cannot finish them (the noitems list), and as a fallback on WDQS timeouts.
 - Logins (Widar) live in an encrypted cookie; users log in once more after the switch. JSONP for Widar is gone (it was announced as removed), edits need a same-site request.
 
 ## Endpoint dispositions

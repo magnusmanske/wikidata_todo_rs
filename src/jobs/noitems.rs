@@ -16,7 +16,9 @@ pub async fn update(state: &AppState, writes: Writes) -> Result<()> {
         "SELECT ?item ?sitelinks {{ ?item wikibase:statements 0 ; wikibase:sitelinks ?sitelinks FILTER(?sitelinks > 1) }}
          ORDER BY DESC(?sitelinks) LIMIT {MAX}"
     );
-    let mut csv = state.sparql.heavy_csv(&query).await?;
+    // WDQS needs over a minute for this and times out; QLever answers in
+    // seconds, and a list of blank items does not need today's data.
+    let mut csv = state.sparql.qlever_csv(&query).await?;
     let mut out = String::from("item\tsitelinks\n");
     let mut rows = 0;
     for row in csv.records() {
