@@ -21,10 +21,11 @@ const TIMEOUT: Duration = Duration::from_secs(90);
 const MAX_JSON_BYTES: usize = 32 * 1024 * 1024;
 /// CSV results go to a temporary file and are read row by row.
 const MAX_CSV_BYTES: usize = 2 * 1024 * 1024 * 1024;
-/// QLever's public endpoint sees many tools through this tool's egress IP and
-/// answers 429 while it is busy; the next attempt, a few seconds later, usually
-/// succeeds. Four retries wait 1, 2, 4 and 8 seconds.
-const QLEVER_RETRIES: u32 = 4;
+/// QLever's public endpoint sees many tools through this tool's egress IP. When
+/// all its query threads are busy, it rejects a query at once (HTTP 429)
+/// instead of queueing it. The daily jobs can wait, so retry for about five
+/// minutes before giving up: the waits double from one second, up to a minute.
+const QLEVER_RETRIES: u32 = 10;
 /// QLever's web interface predeclares the Wikidata prefixes; its API does not,
 /// and rejects a query that uses them without declaring them.
 const QLEVER_PREFIXES: &str = "PREFIX wd: <http://www.wikidata.org/entity/>\n\
