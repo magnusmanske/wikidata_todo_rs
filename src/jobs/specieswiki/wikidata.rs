@@ -5,6 +5,7 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::time::Duration;
 use wikimisc::entity_id::{EntityId, ItemId, PropertyId};
 use wikimisc::mediawiki::api::Api;
 use wikimisc::retry::RetryPolicy;
@@ -23,6 +24,10 @@ const DOI: PropertyId = PropertyId::new(356);
 const MAX_AUTHORS: usize = 50;
 /// For reads that hit a rate limit or a server error.
 const RETRIES: u32 = 4;
+/// Attempts to log in when the session or the wiki is briefly unavailable.
+const LOGIN_ATTEMPTS: usize = 3;
+/// Between login attempts.
+const LOGIN_RETRY_DELAY: Duration = Duration::from_secs(10);
 
 pub struct Wikidata {
     client: wikimisc::wikidata::Wikidata,
@@ -55,7 +60,7 @@ impl Wikidata {
                 let text = std::fs::read_to_string(path).with_context(|| format!("cannot read {}", path.display()))?;
                 let (user, password) = parse_credentials(&text).context("no user and password in the credentials")?;
                 let mut api = client.api().await?;
-                api.login(user, password).await.context("bot login failed")?;
+                login(&mut api, &user, &password).await.context("bot login failed")?;
                 api.set_edit_delay(Some(EDIT_DELAY_MS));
                 Some(api)
             }
@@ -154,6 +159,77 @@ impl Wikidata {
     }
 }
 
+/// Logs in, retrying when the session went stale or the wiki was briefly
+/// unavailable. (`Api::login` reports all of these as a bare "Login failed".)
+async fn login(api: &mut Api, user: &str, password: &str) -> Result<()> {
+    let mut failure = String::new();
+    for attempt in 1..=LOGIN_ATTEMPTS {
+        let token = api.get_token("login").await?;
+        let params = api.params_into(&[
+            ("action", "login"),
+            ("lgname", user),
+            ("lgpassword", password),
+            ("lgtoken", token.as_str()),
+        ]);
+        let response = api.post_query_api_json_mut(&params).await?;
+        match login_outcome(&response) {
+            Login::Done => {
+                api.user_mut().set_from_login(&response["login"])?;
+                api.load_current_user_info().await?;
+                return Ok(());
+            }
+            Login::Failed => bail!("{}", login_failure(&response)),
+            Login::Retry => {
+                failure = login_failure(&response);
+                if attempt < LOGIN_ATTEMPTS {
+                    tracing::warn!("login failed: {failure}; trying again");
+                    tokio::time::sleep(LOGIN_RETRY_DELAY).await;
+                }
+            }
+        }
+    }
+    bail!("{failure} after {LOGIN_ATTEMPTS} login attempts")
+}
+
+/// What a login response means for a next attempt.
+#[derive(Debug, PartialEq, Eq)]
+enum Login {
+    Done,
+    /// A stale session or token, or a wiki that was briefly read-only:
+    /// another attempt may work.
+    Retry,
+    /// A wrong password, a block, …: another attempt will not.
+    Failed,
+}
+
+fn login_outcome(response: &Value) -> Login {
+    match response["login"]["result"].as_str() {
+        Some("Success") => Login::Done,
+        Some("NeedToken" | "WrongToken") => Login::Retry,
+        Some(_) => Login::Failed,
+        None => match response["error"]["code"].as_str() {
+            Some("readonly" | "maxlag") => Login::Retry,
+            Some(code) if code.starts_with("internal_api_error") => Login::Retry,
+            _ => Login::Failed,
+        },
+    }
+}
+
+/// Why a login did not work, for the log.
+fn login_failure(response: &Value) -> String {
+    let login = &response["login"];
+    if let Some(result) = login["result"].as_str() {
+        return match login["reason"].as_str().unwrap_or_default() {
+            "" => result.to_string(),
+            reason => format!("{result}: {reason}"),
+        };
+    }
+    match response["error"]["code"].as_str() {
+        Some(code) => format!("{code}: {}", response["error"]["info"].as_str().unwrap_or_default()),
+        None => format!("unexpected login response: {response}"),
+    }
+}
+
 /// Tries again after rate limits and server errors.
 async fn patiently<T, F, Fut>(op: F) -> Result<T, WikidataError>
 where
@@ -223,6 +299,31 @@ mod tests {
         let text = "[bot]\nUser=Bot@species\u{200e}\npassword = secret \n";
         assert_eq!(parse_credentials(text), Some(("Bot@species".to_string(), "secret".to_string())));
         assert_eq!(parse_credentials("user=x\n"), None);
+    }
+
+    #[test]
+    fn login_responses() {
+        let outcome = |json: &str| login_outcome(&serde_json::from_str(json).unwrap());
+        assert_eq!(outcome(r#"{"login":{"result":"Success"}}"#), Login::Done);
+        assert_eq!(outcome(r#"{"login":{"result":"WrongToken"}}"#), Login::Retry);
+        assert_eq!(outcome(r#"{"error":{"code":"readonly"}}"#), Login::Retry);
+        assert_eq!(outcome(r#"{"error":{"code":"internal_api_error_DBQueryError"}}"#), Login::Retry);
+        assert_eq!(outcome(r#"{"login":{"result":"WrongPass"}}"#), Login::Failed);
+        assert_eq!(outcome(r#"{"login":{"result":"Throttled"}}"#), Login::Failed);
+        assert_eq!(outcome(r#"{}"#), Login::Failed);
+    }
+
+    #[test]
+    fn login_failure_reasons() {
+        let reason = |json: &str| login_failure(&serde_json::from_str(json).unwrap());
+        assert_eq!(
+            reason(r#"{"login":{"result":"WrongPass","reason":"Incorrect password"}}"#),
+            "WrongPass: Incorrect password"
+        );
+        assert_eq!(
+            reason(r#"{"error":{"code":"readonly","info":"The wiki is read-only"}}"#),
+            "readonly: The wiki is read-only"
+        );
     }
 
     #[test]
