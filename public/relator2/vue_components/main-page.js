@@ -46,6 +46,7 @@ import {
 	wikidataTimeValue,
 } from '../utils.js';
 import { apiJson } from '../api-client.js';
+import { queueForItem } from '../write-queue.js';
 import { ensureLoggedIn, isAuthError, isLoggedOut, NOT_LOGGED_IN_MESSAGE } from '../../resources/vue_es6/widar.js';
 import { isRejected } from '../rejection_store.js';
 import { relationWarnings, itemRelationWarnings, isImpossibleRelation, timeValueToInterval } from '../sanity.js';
@@ -143,6 +144,18 @@ function liveHasClaim(entity, prop, target_q) {
 	return claims.some((c) => c.mainsnak?.datavalue?.value?.id === target_q);
 }
 
+// The Widar calls are callback-based. Promisifying them lets several actions
+// wait for each other without blocking anything else.
+function widarRequest(start) {
+	return new Promise((resolve, reject) => {
+		try {
+			start(resolve);
+		} catch (e) {
+			reject(e);
+		}
+	});
+}
+
 const MainPage = Vue.extend({
 	name: 'main-page',
 	mixins: [ttMixin],
@@ -155,28 +168,37 @@ const MainPage = Vue.extend({
 			suggestions: [],
 			is_busy: {},
 			add_item: { relation: '', name: '', gender: '', born: '', died: '', married: '' },
-			creating_item: false,
-			existing_item_to_create: '',
-			// The new person we were about to create when a possible duplicate
-			// was found; kept so the user can override the check and create it
-			// anyway if the match turns out to be wrong.
-			pending_new_item: null,
+			// Writes that add claims to existing items; the shared suggestion
+			// pool makes overlapping batches unsafe, so "Add checked" waits for
+			// these while description saves and item creations run alongside.
+			claims_in_flight: 0,
+			// Item creations in flight. Each job carries its own draft, the main
+			// item it belongs to, and its duplicate-check outcome, so the form can
+			// be reused immediately for the next person.
+			creation_jobs: [],
+			creation_seq: 0,
 			layout: loadLayout(),
 			render_rows: [],
 			pending_confirm: null,
 			errors: [],
 			notice_dismissed: isNoticeDismissed(),
 			help_url: HELP_URL,
+			unmounted: false,
 		};
 	},
 	created() {
 		setSourceUrl(this.$route.query.ref ?? '');
 		bus.$on('error', this.onBusError);
+		// A long-running job may finish after a route change has replaced this
+		// component; the live instance rebuilds its view from appState then.
+		bus.$on('refresh-view', this.refreshView);
 		document.addEventListener('keydown', this.onLayoutHotkey);
 		this.init();
 	},
 	beforeDestroy() {
+		this.unmounted = true;
 		bus.$off('error', this.onBusError);
+		bus.$off('refresh-view', this.refreshView);
 		document.removeEventListener('keydown', this.onLayoutHotkey);
 	},
 	watch: {
@@ -237,8 +259,11 @@ const MainPage = Vue.extend({
 
 		resetAddItem() {
 			this.add_item = { relation: '', name: '', gender: '', born: '', died: '', married: '' };
-			this.existing_item_to_create = '';
-			this.pending_new_item = null;
+		},
+		// A draft that the user has not typed into can be replaced by a restored
+		// failed creation without losing typed input.
+		isAddItemEmpty() {
+			return Object.values(this.add_item).every((v) => !isNonEmptyString(v));
 		},
 		canCreateNewItem() {
 			return isNonEmptyString(this.add_item.gender)
@@ -295,6 +320,9 @@ const MainPage = Vue.extend({
 		},
 		async loadDirectRelations(items) {
 			const wd = getWd();
+			// The batches below await; do not append to a family the user has
+			// navigated away from in the meantime.
+			const main_q = appState.main_q;
 			const loaded = await wd.getItemBatch(items);
 			recomputeItemRelations(loaded);
 			const to_load = [];
@@ -311,6 +339,7 @@ const MainPage = Vue.extend({
 			const loaded2 = await wd.getItemBatch(to_load);
 			recomputeItemRelations(loaded2);
 			for (const target_q of to_load) {
+				if (appState.main_q !== main_q) return;
 				if (wd.getItem(target_q) !== undefined) addItem(target_q);
 			}
 		},
@@ -411,8 +440,21 @@ const MainPage = Vue.extend({
 		isBusy() {
 			return Object.values(this.is_busy).some((n) => n > 0);
 		},
-		isEditing() {
-			return this.creating_item || this.isBusy();
+		// Saves the user can see running: per-item writes plus item creations.
+		// A pending duplicate decision is not a save.
+		activeJobCount() {
+			const busy = Object.values(this.is_busy).filter((n) => n > 0).length;
+			const creating = this.creation_jobs.filter((j) => j.status === 'checking' || j.status === 'creating').length;
+			return busy + creating;
+		},
+		// A job started by a component instance that a route change has since
+		// destroyed still finishes its write; the live instance redraws from the
+		// shared cache.
+		refreshView() {
+			recomputeItemRelations(appState.items);
+			this.initializeIsBusy();
+			this.render();
+			if (!this.isBusy()) this.generateSuggestions();
 		},
 		updateBusy(q, diff) {
 			const current = typeof this.is_busy[q] === 'number' ? this.is_busy[q] : 0;
@@ -422,6 +464,9 @@ const MainPage = Vue.extend({
 		addError(msg) {
 			if (msg === undefined || msg === null || msg === '') return;
 			const text = String(msg);
+			// A job may outlive the component instance that started it (route
+			// change); hand its error to the live instance via the bus.
+			if (this.unmounted) { bus.$emit('error', text); return; }
 			// A batch of edits tends to fail for one and the same reason; saying
 			// it once is enough.
 			if (this.errors.includes(text)) return;
@@ -650,47 +695,48 @@ const MainPage = Vue.extend({
 		// Add or edit an item's description in the user's language. Uses
 		// wbsetdescription, whose response is a partial entity, so we update the
 		// description in place (never updateItemRaw, which would drop the item's
-		// claims) and bump the per-item reactive signal. The originating person
-		// card keeps its editor open until the bus result tells it the outcome,
-		// so the typed text survives a failed save.
+		// claims) and bump the per-item reactive signal. The write is queued
+		// behind any other write to this item, while other items stay editable.
+		// The originating person card keeps its editor open until the bus result
+		// tells it the outcome, so the typed text survives a failed save.
 		async saveDescription(ev) {
 			const q = ev?.q;
 			const lang = ev?.lang;
 			const value = (ev?.text ?? '').trim();
 			if (!ITEM_ID_RE.test(q ?? '') || !isNonEmptyString(lang) || value === '') return;
 			if (getWd().getItem(q) === undefined) return;
-			if (!await this.confirmLogin()) {
-				bus.$emit('description-save-result', { q, ok: false });
-				return;
-			}
 
+			let ok = false;
+			// Lock this card at once, so a slow login check cannot let a second
+			// action start on the same item in the meantime.
 			this.updateBusy(q, 1);
-			const done = (ok) => {
-				this.updateBusy(q, -1);
-				if (!this.isBusy()) this.generateSuggestions();
-				bus.$emit('description-save-result', { q, ok });
-			};
-
 			try {
-				state.widar.setDescription(q, lang, value, DESCRIPTION_SUMMARY, TOOL_HASHTAG, (d) => {
-					try {
+				let logged_in = false;
+				try {
+					logged_in = await this.confirmLogin();
+				} catch (e) {
+					this.addError(`Could not check login: ${e.message || e}`);
+				}
+				if (logged_in) {
+					ok = await queueForItem(q, async () => {
+						const d = await widarRequest((cb) =>
+							state.widar.setDescription(q, lang, value, DESCRIPTION_SUMMARY, TOOL_HASHTAG, cb));
 						if (d?.error !== 'OK') {
 							this.reportEditError(`Could not save description for ${q}`, d?.error ?? 'unknown error');
-							done(false);
-							return;
+							return false;
 						}
 						const saved = d.res?.entity?.descriptions?.[lang]?.value ?? value;
 						this.applyDescription(q, lang, saved);
-						done(true);
-					} catch (e) {
-						this.addError(`Description save handling failed for ${q}: ${e.message || e}`);
-						done(false);
-					}
-				});
+						return true;
+					});
+				}
 			} catch (e) {
-				this.addError(`Could not start description save on ${q}: ${e.message || e}`);
-				done(false);
+				this.addError(`Could not save description on ${q}: ${e.message || e}`);
+			} finally {
+				this.updateBusy(q, -1);
+				if (!this.isBusy()) this.generateSuggestions();
 			}
+			bus.$emit('description-save-result', { q, ok });
 		},
 		applyDescription(q, lang, value) {
 			const item = getWd().getItem(q);
@@ -715,7 +761,6 @@ const MainPage = Vue.extend({
 			const wd = getWd();
 			const item = new WikiDataItem(wd, JSON.parse(JSON.stringify(json)));
 			Vue.set(wd.items, q, item);
-			addItem(q);
 			recomputeItemRelations([q]);
 		},
 
@@ -729,8 +774,11 @@ const MainPage = Vue.extend({
 			return statement;
 		},
 
-		addReferenceToStatement(statement) {
-			const url = appState.source_url.trim();
+		// `source_url` is passed in by jobs that may run after the user has typed a
+		// different reference into the form (or navigated away), so a save cites
+		// the source it was started with.
+		addReferenceToStatement(statement, source_url = appState.source_url) {
+			const url = source_url.trim();
 			if (!isValidURL(url)) return statement;
 			const property = WIKIMEDIA_URL.test(url) ? REFERENCE_WIKIMEDIA_PROP : REFERENCE_URL_PROP;
 			const now = toWikidataDate(new Date());
@@ -759,6 +807,7 @@ const MainPage = Vue.extend({
 		},
 
 		onAddChecked() {
+			if (this.claims_in_flight > 0) return;
 			const selected = this.suggestions.filter((s) => s.selected);
 			this.confirmIfWarnings(this.warningMessages(selected), () => this.commitSelected(selected));
 			return false;
@@ -826,94 +875,120 @@ const MainPage = Vue.extend({
 				Vue.set(s, 'saved_msg', message || 'save failed');
 			}
 		},
-		async persistEditsFor(q, q_suggestions) {
+		async persistEditsFor(q, q_suggestions, source_url = appState.source_url) {
 			const wd = getWd();
 			if (wd.getItem(q) === undefined) return;
-			if (!await this.confirmLogin()) {
-				this.markTransientsError(q_suggestions, 'not logged in');
-				return;
-			}
+
+			// Lock this item before any await, so a second user action cannot
+			// slip in while the login check is still running.
 			this.updateBusy(q, 1);
+			this.claims_in_flight++;
 			let released = false;
 			const release = () => {
 				if (released) return;
 				released = true;
 				this.updateBusy(q, -1);
+				this.claims_in_flight = Math.max(0, this.claims_in_flight - 1);
 				if (!this.isBusy()) this.generateSuggestions();
 			};
 
-			let claimsToAdd;
+			let logged_in = false;
 			try {
-				const live = await fetchLiveEntity(q);
-				if (live) this.updateItemRaw(q, live);
-				claimsToAdd = q_suggestions.filter((s) => !liveHasClaim(live, s.prop, s.to));
+				logged_in = await this.confirmLogin();
+			} catch (e) {
+				this.addError(`Could not check login: ${e.message || e}`);
+			}
+			if (!logged_in) {
+				this.markTransientsError(q_suggestions, 'not logged in');
+				release();
+				return;
+			}
+
+			try {
+				let to_load = [];
+				try {
+					// Queueing keeps two writes to the same item from both seeing the
+					// old state and adding the same claim twice.
+					const outcome = await queueForItem(q, () => this.writeClaimsFor(q, q_suggestions, source_url));
+					to_load = outcome.to_load;
+				} catch (e) {
+					this.addError(`Could not save edit to ${q}: ${e.message || e}`);
+					this.markTransientsError(q_suggestions, `Could not save edit: ${e.message || e}`);
+				}
+
+				// Loading newly related items is read-only. Skip it when the user has
+				// moved on to another family; the write itself already happened.
+				if (to_load.length > 0 && appState.items.includes(q)) {
+					try {
+						await this.loadDirectRelations(to_load);
+						numericSortItems(appState.items);
+						const nonBusyItems = appState.items.filter((iq) => !(this.is_busy[iq] > 0));
+						await wd.getItemBatch(nonBusyItems);
+						bus.$emit('refresh-view');
+					} catch (e) {
+						this.addError(`Failed to refresh after edit to ${q}: ${e.message || e}`);
+					}
+				}
+			} finally {
+				release();
+			}
+		},
+		// One queued claim write: re-read the live item, add only the claims that
+		// are still missing, and apply the response to the shared cache. Returns
+		// the relation targets to load afterwards (none on a no-op or an error).
+		async writeClaimsFor(q, q_suggestions, source_url) {
+			let live;
+			try {
+				live = await fetchLiveEntity(q);
 			} catch (e) {
 				this.addError(`Could not verify live Wikidata state for ${q}: ${e.message || e}`);
 				this.markTransientsError(q_suggestions, `Could not verify live Wikidata state: ${e.message || e}`);
-				release();
-				return;
+				return { to_load: [] };
 			}
-
+			if (live) this.updateItemRaw(q, live);
+			const claimsToAdd = q_suggestions.filter((s) => !liveHasClaim(live, s.prop, s.to));
 			if (claimsToAdd.length === 0) {
 				this.markTransientsSaved(q_suggestions, []);
-				release();
-				return;
+				return { to_load: [] };
 			}
 
 			const data = {
-				claims: claimsToAdd.map((s) => {
-					const statement = {
-						mainsnak: {
-							snaktype: 'value',
-							property: s.prop,
-							datavalue: { value: { id: s.to, 'entity-type': 'item' }, type: 'wikibase-entityid' },
-						},
-						type: 'statement',
-						rank: 'normal',
-					};
-					this.addMarriageQualifier(statement, s.married);
-					return this.addReferenceToStatement(statement);
-				}),
+				claims: claimsToAdd.map((s) => this.addReferenceToStatement(this.statementFor(s), source_url)),
 			};
 			const to_load = relationTargetsToLoad(q_suggestions, appState.items, relation_properties);
 
+			let d;
 			try {
-				state.widar.runWBEditEntity(q, data, EDIT_SUMMARY, TOOL_HASHTAG, async (d) => {
-					try {
-						if (d.error !== 'OK' || d.status !== 'OK') {
-							const msg = `${d.error || ''} / ${d.status || ''}`.trim();
-							this.reportEditError(`Could not save edit to ${q}`, msg);
-							this.markTransientsError(q_suggestions, msg);
-							release();
-							return;
-						}
-						this.updateItemRaw(q, d.res.entity);
-						addItem(q);
-						this.markTransientsSaved(q_suggestions, claimsToAdd);
-						try {
-							await this.loadDirectRelations(to_load);
-							numericSortItems(appState.items);
-							const nonBusyItems = appState.items.filter(iq => !(this.is_busy[iq] > 0));
-							await wd.getItemBatch(nonBusyItems);
-							recomputeItemRelations(nonBusyItems);
-							this.initializeIsBusy();
-							this.render();
-						} catch (e) {
-							this.addError(`Failed to refresh after edit to ${q}: ${e.message || e}`);
-						} finally {
-							release();
-						}
-					} catch (e) {
-						this.addError(`Edit response handling failed for ${q}: ${e.message || e}`);
-						this.markTransientsError(q_suggestions, `Edit response handling failed: ${e.message || e}`);
-						release();
-					}
-				});
+				d = await widarRequest((cb) =>
+					state.widar.runWBEditEntity(q, data, EDIT_SUMMARY, TOOL_HASHTAG, cb));
 			} catch (e) {
 				this.addError(`Could not start edit on ${q}: ${e.message || e}`);
 				this.markTransientsError(q_suggestions, `Could not start edit: ${e.message || e}`);
-				release();
+				return { to_load: [] };
 			}
+
+			if (d?.error !== 'OK' || d?.status !== 'OK') {
+				const msg = `${d?.error || ''} / ${d?.status || ''}`.trim();
+				this.reportEditError(`Could not save edit to ${q}`, msg);
+				this.markTransientsError(q_suggestions, msg);
+				return { to_load: [] };
+			}
+
+			this.updateItemRaw(q, d.res.entity);
+			this.markTransientsSaved(q_suggestions, claimsToAdd);
+			return { to_load };
+		},
+		statementFor(s) {
+			const statement = {
+				mainsnak: {
+					snaktype: 'value',
+					property: s.prop,
+					datavalue: { value: { id: s.to, 'entity-type': 'item' }, type: 'wikibase-entityid' },
+				},
+				type: 'statement',
+				rank: 'normal',
+			};
+			return this.addMarriageQualifier(statement, s.married);
 		},
 
 		async parseNewPersonName() {
@@ -998,6 +1073,9 @@ const MainPage = Vue.extend({
 			await this.detectNewPersonGender();
 		},
 		async guessGenderFromName() {
+			// The draft may be reset while the lookup runs; apply the answer only
+			// to the draft it was asked for.
+			const draft = this.add_item;
 			const fields = document.getElementById('gender_fields');
 			fields?.classList.add('gender-disabled');
 			try {
@@ -1005,13 +1083,13 @@ const MainPage = Vue.extend({
 					setTimeout(() => reject(Object.assign(new Error('timeout'), { isTimeout: true })), 5000)
 				);
 				const json = await Promise.race([
-					apiJson(NAME_GENDER_API_BASE + encodeURIComponent(this.add_item.name)),
+					apiJson(NAME_GENDER_API_BASE + encodeURIComponent(draft.name)),
 					timeout,
 				]);
 				const gender = json
 					.filter((c) => c.mainsnak.property === named_properties.gender)
 					.map((c) => c.mainsnak.datavalue.value.id);
-				if (gender.length === 1) this.add_item.gender = gender[0];
+				if (gender.length === 1 && this.add_item === draft) draft.gender = gender[0];
 			} catch (e) {
 				if (!e.isTimeout) this.addError(`Gender guess failed: ${e.message || e}`);
 			} finally {
@@ -1020,7 +1098,13 @@ const MainPage = Vue.extend({
 		},
 
 		createItemFromInterface() {
+			if (this.pending_confirm) return;
 			const new_item = { ...this.add_item };
+			const main_q = this.main_q;
+			const source_url = appState.source_url;
+			// The button is disabled for an incomplete draft; returning quietly also
+			// swallows a second click that lands before Vue re-renders the form.
+			if (!isNonEmptyString(new_item.name?.trim()) || !isNonEmptyString(new_item.gender?.trim())) return;
 			// The Born/Died fields hold free-form text; normalise them to the
 			// ISO-ish form newClaimDate expects so an unparseable value can't
 			// reach it and yield an undefined claim (issue #76). Doing it here
@@ -1033,13 +1117,13 @@ const MainPage = Vue.extend({
 					this.addError(`Could not parse ${field} date "${raw}"; it will be omitted.`);
 				new_item[field] = parsed;
 			}
-			this.confirmIfWarnings(this.newItemWarnings(new_item),
-				() => this.checkBeforeItemCreation(new_item, () => this.createItem(new_item)));
+			this.confirmIfWarnings(this.newItemWarnings(new_item, main_q),
+				() => this.startCreation(new_item, main_q, source_url));
 		},
 		// Validate the relation a brand-new person would have to the main item,
 		// using the typed birth/death dates (the item has no QID yet).
-		newItemWarnings(new_item) {
-			if (!isNonEmptyString(new_item.relation) || !isNonEmptyString(this.main_q)) return [];
+		newItemWarnings(new_item, main_q = this.main_q) {
+			if (!isNonEmptyString(new_item.relation) || !isNonEmptyString(main_q)) return [];
 			const dateOverrides = {
 				[PENDING_NEW_Q]: {
 					birth: timeValueToInterval(wikidataTimeValue(normalizeDateInput(new_item.born))),
@@ -1048,34 +1132,60 @@ const MainPage = Vue.extend({
 			};
 			const labels = { [PENDING_NEW_Q]: isNonEmptyString(new_item.name) ? new_item.name : 'the new person' };
 			return this.warningMessages(
-				[{ from: PENDING_NEW_Q, prop: new_item.relation, to: this.main_q }],
+				[{ from: PENDING_NEW_Q, prop: new_item.relation, to: main_q }],
 				dateOverrides, labels);
 		},
-		useExistingItem() {
-			if (!isNonEmptyString(this.existing_item_to_create) || !isNonEmptyString(this.add_item.relation)) return;
+		useExistingItem(job) {
+			if (!isNonEmptyString(job?.duplicate_q) || !isNonEmptyString(job.item.relation)) return;
 			bus.$emit('prefill-add-relation', {
-				q: this.main_q,
-				prop: this.add_item.relation,
-				target_q: this.existing_item_to_create,
+				q: job.main_q,
+				prop: job.item.relation,
+				target_q: job.duplicate_q,
 			});
-			this.resetAddItem();
+			this.dismissCreationJob(job.id);
 		},
 		// The duplicate check flagged an existing item, but the user judged it
 		// a wrong match — create the new item regardless, skipping the check.
-		createPendingItemAnyway() {
-			const new_item = this.pending_new_item;
-			if (!new_item) return;
-			this.existing_item_to_create = '';
-			this.pending_new_item = null;
-			this.createItem(new_item);
+		createPendingItemAnyway(job) {
+			if (!job || job.status === 'creating') return;
+			job.duplicate_q = '';
+			this.createItem(job);
 		},
-		async checkBeforeItemCreation(new_item, callback) {
-			this.existing_item_to_create = '';
-			this.pending_new_item = null;
-			if (!isNonEmptyString(new_item.born) && !isNonEmptyString(new_item.died)) return callback();
+		// Start a creation job and free the form for the next person immediately.
+		// All data the job needs is snapshotted, so later typing cannot change it.
+		startCreation(new_item, job_main_q = this.main_q, source_url = appState.source_url) {
+			this.resetAddItem();
+			const job = {
+				id: ++this.creation_seq,
+				main_q: job_main_q,
+				item: new_item,
+				source_url,
+				status: 'checking',
+				duplicate_q: '',
+				error: '',
+			};
+			this.creation_jobs.push(job);
+			this.checkBeforeItemCreation(job);
+		},
+		dismissCreationJob(id) {
+			this.creation_jobs = this.creation_jobs.filter((j) => j.id !== id);
+		},
+		// Put a failed job's data back into the form, but never overwrite input
+		// the user has started on since.
+		restoreDraft(job) {
+			if (!job || !this.isAddItemEmpty()) return;
+			this.add_item = { ...job.item };
+			this.dismissCreationJob(job.id);
+		},
+		async checkBeforeItemCreation(job) {
+			const new_item = job.item;
 			try {
+				if (!isNonEmptyString(new_item.born) && !isNonEmptyString(new_item.died)) {
+					await this.createItem(job);
+					return;
+				}
 				const titles = await searchHumansMatching(new_item.name);
-				if (titles.length === 0) return callback();
+				if (titles.length === 0) { await this.createItem(job); return; }
 				const wd = getWd();
 				await wd.getItemBatch(titles);
 				const yearOf = (s) => (s ?? '').replace(/-.*$/, '');
@@ -1092,74 +1202,101 @@ const MainPage = Vue.extend({
 					if (target_died && !yearsForProp(i, DEATH_PROP).includes(target_died)) return false;
 					return true;
 				});
-				if (!found) return callback();
+				if (!found) { await this.createItem(job); return; }
 				await wd.getItemBatch([found]);
-				this.existing_item_to_create = found;
-				// Remember what we were about to create so the user can still
-				// create it if this match is wrong (see createPendingItemAnyway).
-				this.pending_new_item = new_item;
+				job.duplicate_q = found;
+				job.status = 'duplicate';
 			} catch (e) {
 				this.addError(`Pre-creation check failed: ${e.message || e}`);
-				callback();
+				await this.createItem(job);
 			}
 		},
-		async createItem(new_item) {
-			if (!isNonEmptyString(new_item.name?.trim())) { this.addError('Name is required'); return; }
-			if (!isNonEmptyString(new_item.gender?.trim())) { this.addError('Gender is required'); return; }
-			if (!await this.confirmLogin()) return;
+		async createItem(job) {
+			// Set the status before the first await so a second click on "create
+			// anyway" cannot start a second creation of the same person.
+			if (job.status === 'creating') return;
+			job.status = 'creating';
+			const new_item = job.item;
+			if (!isNonEmptyString(new_item.name?.trim())) { this.reportCreationError(job, 'Name is required'); return; }
+			if (!isNonEmptyString(new_item.gender?.trim())) { this.reportCreationError(job, 'Gender is required'); return; }
 
-			const data = { labels: { mul: { language: 'mul', value: new_item.name } }, claims: [] };
-			data.claims.push(this.addReferenceToStatement(state.widar.newClaimEntity(INSTANCE_OF, HUMAN)));
-			if (isNonEmptyString(new_item.gender))
-				data.claims.push(this.addReferenceToStatement(state.widar.newClaimEntity(named_properties.gender, new_item.gender)));
-			if (isNonEmptyString(new_item.relation)) {
-				let relationClaim = state.widar.newClaimEntity(new_item.relation, this.main_q);
-				if (new_item.relation === named_properties.spouse)
-					relationClaim = this.addMarriageQualifier(relationClaim, new_item.married);
-				data.claims.push(this.addReferenceToStatement(relationClaim));
+			let logged_in = false;
+			try {
+				logged_in = await this.confirmLogin();
+			} catch (e) {
+				this.addError(`Could not check login: ${e.message || e}`);
 			}
-			if (isNonEmptyString(new_item.born))
-				data.claims.push(this.addReferenceToStatement(state.widar.newClaimDate(BIRTH_PROP, new_item.born)));
-			if (isNonEmptyString(new_item.died))
-				data.claims.push(this.addReferenceToStatement(state.widar.newClaimDate(DEATH_PROP, new_item.died)));
+			if (!logged_in) {
+				job.status = 'error';
+				job.error = 'not logged in';
+				return;
+			}
 
-			const params = {
-				action: 'generic',
-				summary: NEW_ITEM_SUMMARY,
-				tool_hashtag: 'relator2',
-				json: JSON.stringify({ action: 'wbeditentity', new: 'item', data: JSON.stringify(data) }),
-			};
+			let d;
+			try {
+				const reference = (s) => this.addReferenceToStatement(s, job.source_url);
+				const data = { labels: { mul: { language: 'mul', value: new_item.name } }, claims: [] };
+				data.claims.push(reference(state.widar.newClaimEntity(INSTANCE_OF, HUMAN)));
+				if (isNonEmptyString(new_item.gender))
+					data.claims.push(reference(state.widar.newClaimEntity(named_properties.gender, new_item.gender)));
+				if (isNonEmptyString(new_item.relation)) {
+					let relationClaim = state.widar.newClaimEntity(new_item.relation, job.main_q);
+					if (new_item.relation === named_properties.spouse)
+						relationClaim = this.addMarriageQualifier(relationClaim, new_item.married);
+					data.claims.push(reference(relationClaim));
+				}
+				if (isNonEmptyString(new_item.born))
+					data.claims.push(reference(state.widar.newClaimDate(BIRTH_PROP, new_item.born)));
+				if (isNonEmptyString(new_item.died))
+					data.claims.push(reference(state.widar.newClaimDate(DEATH_PROP, new_item.died)));
 
-			this.creating_item = true;
-			state.widar.run(params, (d) => {
-				this.creating_item = false;
-				try {
-					if (d.error !== 'OK') { this.reportEditError('Item creation failed', d.error); return; }
-					const q = d.res.entity.id;
-					// When a marriage date was supplied for a spouse, write the
-					// mirror P26 statement on the main item now (with the same
-					// P580 qualifier) instead of leaving it to a suggestion.
-					const addMarriageMirror = new_item.relation === named_properties.spouse
-						&& isNonEmptyString(new_item.married);
-					this.resetAddItem();
-					this.updateItemRaw(q, d.res.entity);
+				const params = {
+					action: 'generic',
+					summary: NEW_ITEM_SUMMARY,
+					tool_hashtag: 'relator2',
+					json: JSON.stringify({ action: 'wbeditentity', new: 'item', data: JSON.stringify(data) }),
+				};
+				d = await widarRequest((cb) => state.widar.run(params, cb));
+			} catch (e) {
+				this.reportCreationError(job, `Could not start item creation: ${e.message || e}`);
+				return;
+			}
+			if (d?.error !== 'OK') {
+				this.reportEditError('Item creation failed', d?.error ?? 'unknown error');
+				this.reportCreationError(job, d?.error ?? 'unknown error');
+				return;
+			}
+
+			try {
+				const q = d.res.entity.id;
+				this.updateItemRaw(q, d.res.entity);
+				if (job.main_q === appState.main_q) {
 					numericSortItems(appState.items);
 					addItem(q);
-					this.render();
-					if (addMarriageMirror) {
-						this.persistEditsFor(this.main_q, [{
-							from: this.main_q,
-							prop: named_properties.spouse,
-							to: q,
-							married: new_item.married,
-						}]);
-					} else {
-						this.generateSuggestions();
-					}
-				} catch (e) {
-					this.addError(`Item creation post-processing failed: ${e.message || e}`);
+					bus.$emit('refresh-view');
 				}
-			});
+				this.dismissCreationJob(job.id);
+				// When a marriage date was supplied for a spouse, write the
+				// mirror P26 statement on the main item now (with the same P580
+				// qualifier) instead of leaving it to a suggestion.
+				const addMarriageMirror = new_item.relation === named_properties.spouse
+					&& isNonEmptyString(new_item.married);
+				if (addMarriageMirror) {
+					this.persistEditsFor(job.main_q, [{
+						from: job.main_q,
+						prop: named_properties.spouse,
+						to: q,
+						married: new_item.married,
+					}], job.source_url);
+				}
+			} catch (e) {
+				this.addError(`Item creation post-processing failed: ${e.message || e}`);
+				this.reportCreationError(job, `Post-processing failed: ${e.message || e}`);
+			}
+		},
+		reportCreationError(job, message) {
+			job.status = 'error';
+			job.error = message || 'unknown error';
 		},
 
 		labelFor(q) {
@@ -1186,11 +1323,11 @@ const MainPage = Vue.extend({
         </div>
     </div>
     <div class="saving-toast-container" aria-live="polite" aria-atomic="true">
-        <div v-if="isEditing()" class="toast show align-items-center saving-toast" role="status">
+        <div v-if="activeJobCount() > 0" class="toast show align-items-center saving-toast" role="status">
             <div class="d-flex">
                 <div class="toast-body d-flex align-items-center">
                     <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-                    <span>Saving edits&hellip;</span>
+                    <span>Saving edits&hellip;<template v-if="activeJobCount() > 1"> ({{activeJobCount()}})</template></span>
                 </div>
             </div>
         </div>
@@ -1251,7 +1388,7 @@ const MainPage = Vue.extend({
             </template>
         </tool-navbar>
 
-        <div v-if="!loading && main_q" class="add-item-form" :class="{ 'is-creating': creating_item }">
+        <div v-if="!loading && main_q" class="add-item-form">
             <div class="add-item-fields">
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     <span tt="main_item_is" :tt1="labelFor(main_q)"></span>
@@ -1286,24 +1423,43 @@ const MainPage = Vue.extend({
                     </div>
                     <button class="btn btn-sm btn-outline-success" tt="create_new_item"
                         @click.prevent="createItemFromInterface"
-                        :disabled="!canCreateNewItem() || isEditing()"></button>
+                        :disabled="!canCreateNewItem()"></button>
                     <button class="btn btn-sm btn-outline-secondary" tt="clear"
                         @click.prevent="resetAddItem"></button>
                     <button v-if="showAddCheckedButton()" class="btn btn-outline-primary" tt="add_checked"
-                        @click.prevent="onAddChecked" :disabled="isEditing()"></button>
+                        @click.prevent="onAddChecked" :disabled="claims_in_flight > 0"></button>
                 </div>
                 <div class="d-flex align-items-center mt-2 gap-2 source-url-row">
                     <span tt="source_url" class="source-url-label"></span>
                     <input type="text" class="form-control form-control-sm flex-grow-1 source-url-input" v-model="source_url" tt_placeholder="ph_source_url" />
                 </div>
-                <div v-if="existing_item_to_create !== ''" class="alert alert-warning alert-dismissible mt-2 d-flex align-items-center gap-2" role="alert">
-                    <span tt="item_exists_as"></span>
-                    <wd-link :item="existing_item_to_create" :wd="wd"></wd-link>
-                    <small>[{{existing_item_to_create}}]</small>
-                    <button type="button" class="btn btn-sm btn-outline-primary ms-2" tt="add_as_relation" @click.prevent="useExistingItem"></button>
-                    <button type="button" class="btn btn-sm btn-outline-success" tt="create_new_item"
-                        :disabled="creating_item" @click.prevent="createPendingItemAnyway"></button>
-                    <button type="button" class="btn-close" aria-label="Close" @click.prevent="existing_item_to_create=''; pending_new_item=null"></button>
+                <div v-for="job in creation_jobs" :key="'job_'+job.id" class="mt-2">
+                    <div v-if="job.status === 'duplicate'"
+                        class="alert alert-warning alert-dismissible mb-1 d-flex flex-wrap align-items-center gap-2" role="alert">
+                        <span tt="item_exists_as"></span>
+                        <wd-link :item="job.duplicate_q" :wd="wd"></wd-link>
+                        <small>[{{job.duplicate_q}}]</small>
+                        <button type="button" class="btn btn-sm btn-outline-primary" tt="add_as_relation"
+                            @click.prevent="useExistingItem(job)"></button>
+                        <button type="button" class="btn btn-sm btn-outline-success" tt="create_new_item"
+                            @click.prevent="createPendingItemAnyway(job)"></button>
+                        <button v-if="isAddItemEmpty()" type="button" class="btn btn-sm btn-outline-secondary"
+                            @click.prevent="restoreDraft(job)">Restore draft</button>
+                        <button type="button" class="btn-close" aria-label="Close"
+                            @click.prevent="dismissCreationJob(job.id)"></button>
+                    </div>
+                    <div v-else-if="job.status === 'error'"
+                        class="alert alert-danger alert-dismissible mb-1 d-flex flex-wrap align-items-center gap-2" role="alert">
+                        <span>Could not create <strong>{{job.item.name}}</strong>: {{job.error}}</span>
+                        <button v-if="isAddItemEmpty()" type="button" class="btn btn-sm btn-outline-secondary"
+                            @click.prevent="restoreDraft(job)">Restore draft</button>
+                        <button type="button" class="btn-close" aria-label="Close"
+                            @click.prevent="dismissCreationJob(job.id)"></button>
+                    </div>
+                    <div v-else class="alert alert-secondary mb-1 d-flex align-items-center gap-2" role="status">
+                        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                        <span>Creating <strong>{{job.item.name}}</strong>&hellip;</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1332,36 +1488,36 @@ const MainPage = Vue.extend({
     <div v-else class="relator2-body">
         <div v-if="layout === 'classic'">
             <div class="people-row" v-if="ancestors().length > 0">
-                <people :items="ancestors()" :suggestions="suggestions" :is_busy="is_busy" :editing="isEditing()"
+                <people :items="ancestors()" :suggestions="suggestions" :is_busy="is_busy"
                     @add-suggestions="addSuggestions" @change-main-q="changeMainQ" @select-suggestion="selectSuggestion" @set-gender="setGender" @set-description="saveDescription"></people>
             </div>
             <div class="people-row">
-                <people :items="spouses()" :suggestions="suggestions" :is_busy="is_busy" :editing="isEditing()"
+                <people :items="spouses()" :suggestions="suggestions" :is_busy="is_busy"
                     @add-suggestions="addSuggestions" @change-main-q="changeMainQ" @select-suggestion="selectSuggestion" @set-gender="setGender" @set-description="saveDescription"></people>
-                <people :items="[main_q]" :suggestions="suggestions" :is_busy="is_busy" :editing="isEditing()"
+                <people :items="[main_q]" :suggestions="suggestions" :is_busy="is_busy"
                     @add-suggestions="addSuggestions" @change-main-q="changeMainQ" @select-suggestion="selectSuggestion" @set-gender="setGender" @set-description="saveDescription"></people>
-                <people :items="relatives()" :suggestions="suggestions" :is_busy="is_busy" :editing="isEditing()"
+                <people :items="relatives()" :suggestions="suggestions" :is_busy="is_busy"
                     @add-suggestions="addSuggestions" @change-main-q="changeMainQ" @select-suggestion="selectSuggestion" @set-gender="setGender" @set-description="saveDescription"></people>
             </div>
             <div class="people-row" v-if="descendants().length > 0">
-                <people :items="descendants()" :suggestions="suggestions" :is_busy="is_busy" :editing="isEditing()"
+                <people :items="descendants()" :suggestions="suggestions" :is_busy="is_busy"
                     @add-suggestions="addSuggestions" @change-main-q="changeMainQ" @select-suggestion="selectSuggestion" @set-gender="setGender" @set-description="saveDescription"></people>
             </div>
         </div>
         <div v-else-if="layout === 'v2'">
             <div class="people-row" v-for="(row, idx) in render_rows" :key="'row_'+idx">
-                <people :items="row" :suggestions="suggestions" :is_busy="is_busy" :editing="isEditing()"
+                <people :items="row" :suggestions="suggestions" :is_busy="is_busy"
                     @add-suggestions="addSuggestions" @change-main-q="changeMainQ" @select-suggestion="selectSuggestion" @set-gender="setGender" @set-description="saveDescription"></people>
             </div>
         </div>
         <div v-else-if="layout === 'columns'" class="people-columns">
             <div class="people-column" v-for="(row, idx) in render_rows" :key="'col_'+idx">
-                <people :items="row" :suggestions="suggestions" :is_busy="is_busy" :editing="isEditing()"
+                <people :items="row" :suggestions="suggestions" :is_busy="is_busy"
                     @add-suggestions="addSuggestions" @change-main-q="changeMainQ" @select-suggestion="selectSuggestion" @set-gender="setGender" @set-description="saveDescription"></people>
             </div>
         </div>
         <div v-else-if="layout === 'graph'">
-            <graph-view :suggestions="suggestions" :is_busy="is_busy" :editing="isEditing()"
+            <graph-view :suggestions="suggestions" :is_busy="is_busy"
                 @add-suggestions="addSuggestions" @change-main-q="changeMainQ" @select-suggestion="selectSuggestion" @set-gender="setGender" @set-description="saveDescription"></graph-view>
         </div>
         <div v-else>Unknown layout "{{layout}}"</div>

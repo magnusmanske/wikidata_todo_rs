@@ -4,7 +4,7 @@ import './person.js';
 const definition = {
     name: 'people',
     mixins: [ttMixin],
-    props: ['items', 'suggestions', 'is_busy', 'editing'],
+    props: ['items', 'suggestions', 'is_busy'],
     methods: {
         suggestionsForQ(q) { return (this.suggestions ?? []).filter((s) => s.from === q); },
         forwardAddSuggestions(ev) { this.$emit('add-suggestions', ev); },
@@ -19,7 +19,6 @@ const definition = {
         <person v-for="q in items" :key="'person_'+q"
             :q="q"
             :is_busy="(is_busy[q] ?? 0) > 0"
-            :editing="editing"
             :suggestions="suggestionsForQ(q)"
             @add-suggestions="forwardAddSuggestions"
             @change-main-q="forwardChangeMainQ"

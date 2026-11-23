@@ -97,7 +97,6 @@ const definition = {
         q: {},
         suggestions: {},
         is_busy: {},
-        editing: {},
         hide_relations: { type: Boolean, default: false },
     },
     data() {
@@ -203,7 +202,7 @@ const definition = {
         },
 
         startEditDescription() {
-            if (this.editing || this.saving_description) return;
+            if (this.is_busy || this.saving_description) return;
             this.description_draft = this.i?.getDesc(this.desc_lang) ?? '';
             this.editing_description = true;
             this.$nextTick(() => this.$refs.descInput?.focus());
@@ -216,12 +215,15 @@ const definition = {
             return isSaveableDescription(this.description_draft, this.i?.getDesc(this.desc_lang) ?? '');
         },
         submitDescription() {
-            if (this.editing || this.saving_description || !this.canSaveDescription()) return;
+            if (this.is_busy || this.saving_description || !this.canSaveDescription()) return;
             this.saving_description = true;
             this.$emit('set-description', { q: this.q, lang: this.desc_lang, text: this.description_draft.trim() });
         },
         onDescriptionSaveResult({ q, ok }) {
-            if (q !== this.q) return;
+            // Only the card that submitted this save may consume the result; a
+            // delayed result must not close an editor opened later on the same
+            // item (for example after navigating away and back).
+            if (q !== this.q || !this.saving_description) return;
             this.saving_description = false;
             if (ok) {
                 this.editing_description = false;
@@ -266,7 +268,7 @@ const definition = {
             this.adding_gender = !this.adding_gender;
         },
         chooseGender(gender_q) {
-            if (this.editing || this.is_busy) return;
+            if (this.is_busy) return;
             this.adding_gender = false;
             this.$emit('set-gender', { q: this.q, gender_q });
         },
@@ -444,9 +446,9 @@ const definition = {
                 <span v-else-if="has_gender_claim">?</span>
                 <span v-else-if="adding_gender" class="person-gender-picker" @click.stop>
                     <button type="button" class="person-gender-choice" tt_title="male"
-                        :disabled="editing || is_busy" @click.stop.prevent="chooseGender(named_items.male)">♂</button>
+                        :disabled="is_busy" @click.stop.prevent="chooseGender(named_items.male)">♂</button>
                     <button type="button" class="person-gender-choice" tt_title="female"
-                        :disabled="editing || is_busy" @click.stop.prevent="chooseGender(named_items.female)">♀</button>
+                        :disabled="is_busy" @click.stop.prevent="chooseGender(named_items.female)">♀</button>
                     <button type="button" class="person-gender-cancel" tt_title="cancel"
                         @click.stop.prevent="toggleAddingGender">×</button>
                 </span>
@@ -468,7 +470,7 @@ const definition = {
                         tt_placeholder="ph_description"
                         @keyup.enter="submitDescription" @keyup.esc="cancelEditDescription" />
                     <button type="button" class="description-save" tt_title="save_description"
-                        :disabled="!canSaveDescription() || saving_description || editing"
+                        :disabled="!canSaveDescription() || saving_description || is_busy"
                         @click.stop.prevent="submitDescription">✓</button>
                     <button type="button" class="description-cancel" tt_title="cancel"
                         :disabled="saving_description"
@@ -552,7 +554,7 @@ const definition = {
                             <input type="text" placeholder="Qxxx" class="add_statement_new_q form-control form-control-sm d-inline-block w-auto"
                                 v-model="new_q" :q="q" @keyup.enter="addRelation" />
                             <button type="button" class="btn btn-sm btn-outline-success" tt="add_relation"
-                                :disabled="!canAddRelation() || editing || adding_relation" @click.prevent="addRelation"></button>
+                                :disabled="!canAddRelation() || is_busy || adding_relation" @click.prevent="addRelation"></button>
                         </td>
                     </tr>
                 </table>

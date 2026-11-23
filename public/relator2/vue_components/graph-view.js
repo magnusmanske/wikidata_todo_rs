@@ -46,7 +46,7 @@ function storeOrientation(v) {
 const definition = {
     name: 'graph-view',
     mixins: [ttMixin],
-    props: ['suggestions', 'is_busy', 'editing'],
+    props: ['suggestions', 'is_busy'],
     data() {
         return { expanded_q: null, drag_over_q: '', orientation: loadOrientation() };
     },
@@ -463,7 +463,7 @@ const definition = {
             <button type="button" class="relator-expand-close" title="collapse" @click.stop="closeExpanded">&times;</button>
             <ul class="people-list">
                 <person ref="expandedPerson" :q="expanded_q" :hide_relations="true"
-                    :is_busy="nodeBusy(expanded_q)" :editing="editing" :suggestions="suggestionsForQ(expanded_q)"
+                    :is_busy="nodeBusy(expanded_q)" :suggestions="suggestionsForQ(expanded_q)"
                     @add-suggestions="forwardAddSuggestions" @change-main-q="forwardChangeMainQ"
                     @select-suggestion="forwardSelectSuggestion" @set-gender="forwardSetGender"
                     @set-description="forwardSetDescription"></person>
