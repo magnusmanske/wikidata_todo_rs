@@ -46,7 +46,7 @@ pub struct Term {
 }
 
 pub async fn conn(replicas: &Replicas) -> Result<Conn> {
-    replicas.conn(&Wiki::wikidata(), TABLES).await
+    Ok(replicas.conn(&Wiki::wikidata(), TABLES).await?)
 }
 
 /// The label of each of `ids` (items and properties) in the first of

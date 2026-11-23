@@ -220,7 +220,7 @@ async fn drop_linked_candidates(state: &AppState, wiki: &Wiki, tool: &mut Conn, 
 async fn items_with_sitelink(state: &AppState, site: &str, items: &[u64]) -> Result<Vec<u64>> {
     let mut conn = state.replicas.conn(&Wiki::wikidata(), &["wb_items_per_site"]).await?;
     let sql = "SELECT DISTINCT ips_item_id FROM wb_items_per_site WHERE ips_site_id=? AND ips_item_id IN";
-    select_in(&mut conn, sql, "", &[site.into()], items).await
+    Ok(select_in(&mut conn, sql, "", &[site.into()], items).await?)
 }
 
 /// Finds candidate items for random `no_wd` articles: items with the

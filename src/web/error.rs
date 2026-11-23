@@ -1,5 +1,7 @@
 //! Errors a request can end in, shown as themed pages.
 
+use crate::mediawiki::WikiApiError;
+use crate::replicas::ReplicasError;
 use crate::wiki::UnknownWiki;
 use askama::Template;
 use axum::http::{HeaderValue, StatusCode, header};
@@ -29,6 +31,18 @@ pub enum AppError {
 impl From<UnknownWiki> for AppError {
     fn from(e: UnknownWiki) -> Self {
         Self::BadRequest(e.to_string())
+    }
+}
+
+impl From<ReplicasError> for AppError {
+    fn from(e: ReplicasError) -> Self {
+        Self::Upstream(e.into())
+    }
+}
+
+impl From<WikiApiError> for AppError {
+    fn from(e: WikiApiError) -> Self {
+        Self::Upstream(e.into())
     }
 }
 

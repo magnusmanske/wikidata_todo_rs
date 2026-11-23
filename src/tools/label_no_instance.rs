@@ -87,7 +87,7 @@ async fn search(state: &AppState, lang: &str, pattern: &str) -> Result<Results, 
 async fn classified(state: &AppState, items: &[String]) -> anyhow::Result<HashSet<String>> {
     let mut conn = state.replicas.conn(&Wiki::wikidata(), &["page", "pagelinks", "linktarget"]).await?;
     let targets = linktarget_ids(&mut conn, NS_PROPERTY, &["P31", "P279"]).await?;
-    titles_linking_to(&mut conn, items, &targets).await
+    Ok(titles_linking_to(&mut conn, items, &targets).await?)
 }
 
 #[cfg(test)]

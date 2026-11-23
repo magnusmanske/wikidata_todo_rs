@@ -215,7 +215,7 @@ async fn linked_items(state: &AppState, site: &str, page: &str) -> anyhow::Resul
     let titles: Vec<String> = titles.iter().map(|t| display_title(t)).collect();
     let mut conn = state.replicas.conn(&Wiki::wikidata(), &["wb_items_per_site"]).await?;
     let sql = "SELECT DISTINCT ips_item_id FROM wb_items_per_site WHERE ips_site_id=? AND ips_site_page IN";
-    select_in(&mut conn, sql, "", &[site.into()], &titles).await
+    Ok(select_in(&mut conn, sql, "", &[site.into()], &titles).await?)
 }
 
 /// The items that the item links to.
