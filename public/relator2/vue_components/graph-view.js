@@ -444,7 +444,7 @@ const definition = {
 
         <template v-for="q in nodes">
             <div v-if="expanded_q !== q" :key="'node-' + q"
-                :class="nodeClass(q)" class="relator-node" :style="nodeStyle(q)"
+                :class="nodeClass(q)" class="relator-node" :style="nodeStyle(q)" :data-q="q"
                 @click="onNodeClick(q)" @mouseenter="onNodeEnter(q)" @mouseleave="onNodeLeave(q)"
                 @dragover="onBoxDragOver($event, q)" @dragleave="onBoxDragLeave(q)" @drop="onBoxDrop($event, q)">
                 <div class="relator-node-name" :title="label(q) + ' [' + q + ']'">{{label(q)}}</div>

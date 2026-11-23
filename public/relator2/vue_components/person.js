@@ -429,7 +429,7 @@ const definition = {
         },
     },
     template: `
-<li class="person-card-wrapper" :key="'item_li_'+q">
+<li class="person-card-wrapper" :key="'item_li_'+q" :data-q="q">
     <div v-if="i===undefined" class="person-not-loaded">Could not load {{q}}</div>
     <div v-else
         :key="'item_div_'+q"

@@ -306,8 +306,16 @@ const MainPage = Vue.extend({
 		// Runs on the next tick so the just-rendered cards are in the DOM, and
 		// skips quietly when there is no main card (e.g. a load error).
 		scrollToMainItem() {
+			this.scrollIntoView('.person-card-main');
+		},
+		// A newly created card can land outside the viewport (a new generation
+		// row below the main one, a spouse inserted beside it); show it.
+		scrollToItem(q) {
+			this.scrollIntoView(`.person-card-wrapper[data-q="${q}"], .relator-node[data-q="${q}"]`);
+		},
+		scrollIntoView(selector) {
 			this.$nextTick(() => {
-				const el = this.$el?.querySelector?.('.person-card-main');
+				const el = this.$el?.querySelector?.(selector);
 				if (!el) return;
 				const rect = el.getBoundingClientRect();
 				const vh = window.innerHeight || document.documentElement.clientHeight;
@@ -377,14 +385,18 @@ const MainPage = Vue.extend({
 			this.cycleLayout();
 		},
 		render() {
-			this.render_rows = [];
-			if (!LAYOUTS.includes(this.layout)) return;
+			if (!LAYOUTS.includes(this.layout)) {
+				this.render_rows = [];
+				return;
+			}
 			const rows = [[this.main_q]];
 			const rowIndex = new Map();
 			rowIndex.set(this.main_q, 0);
 			this.renderTree(this.main_q, rows, rowIndex);
 			const leftovers = appState.items.filter((q) => !rowIndex.has(q));
 			if (leftovers.length > 0) rows.push(leftovers);
+			// Assign only once the rows are complete: an exception must leave the
+			// previous view in place rather than blanking it.
 			this.render_rows = rows;
 		},
 		renderTree(q, rows, rowIndex) {
@@ -449,12 +461,19 @@ const MainPage = Vue.extend({
 		},
 		// A job started by a component instance that a route change has since
 		// destroyed still finishes its write; the live instance redraws from the
-		// shared cache.
-		refreshView() {
-			recomputeItemRelations(appState.items);
-			this.initializeIsBusy();
-			this.render();
-			if (!this.isBusy()) this.generateSuggestions();
+		// shared cache. `scroll_to` (a QID) brings a newly created card into view.
+		refreshView(scroll_to) {
+			try {
+				// Render first: the tree needs only appState.items, and a failure in
+				// the relation or suggestion bookkeeping below must not hide a change.
+				this.render();
+				recomputeItemRelations(appState.items);
+				this.initializeIsBusy();
+				if (!this.isBusy()) this.generateSuggestions();
+				if (scroll_to) this.scrollToItem(scroll_to);
+			} catch (e) {
+				this.addError(`Could not refresh the view: ${e.message || e}`);
+			}
 		},
 		updateBusy(q, diff) {
 			const current = typeof this.is_busy[q] === 'number' ? this.is_busy[q] : 0;
@@ -1270,10 +1289,20 @@ const MainPage = Vue.extend({
 			try {
 				const q = d.res.entity.id;
 				this.updateItemRaw(q, d.res.entity);
-				if (job.main_q === appState.main_q) {
-					numericSortItems(appState.items);
+				// The instance that started the job is still the page on screen, so
+				// add the new person to its view and redraw directly. Only a job whose
+				// page has gone (route change) needs the live instance via the bus.
+				if (!this.unmounted) {
+					if (job.main_q !== appState.main_q) {
+						console.warn('relator2: creation finished after the view changed', job.main_q, appState.main_q);
+					}
 					addItem(q);
-					bus.$emit('refresh-view');
+					numericSortItems(appState.items);
+					this.refreshView(q);
+				} else if (job.main_q === appState.main_q) {
+					addItem(q);
+					numericSortItems(appState.items);
+					bus.$emit('refresh-view', q);
 				}
 				this.dismissCreationJob(job.id);
 				// When a marriage date was supplied for a spouse, write the
