@@ -897,6 +897,9 @@ const MainPage = Vue.extend({
 		async persistEditsFor(q, q_suggestions, source_url = appState.source_url) {
 			const wd = getWd();
 			if (wd.getItem(q) === undefined) return;
+			// Adding a relation can introduce people into this family; remember which
+			// family the user is looking at so a later route change is respected.
+			const main_q = appState.main_q;
 
 			// Lock this item before any await, so a second user action cannot
 			// slip in while the login check is still running.
@@ -924,22 +927,35 @@ const MainPage = Vue.extend({
 			}
 
 			try {
+				let saved = false;
 				let to_load = [];
 				try {
 					// Queueing keeps two writes to the same item from both seeing the
 					// old state and adding the same claim twice.
 					const outcome = await queueForItem(q, () => this.writeClaimsFor(q, q_suggestions, source_url));
+					saved = outcome.saved;
 					to_load = outcome.to_load;
 				} catch (e) {
 					this.addError(`Could not save edit to ${q}: ${e.message || e}`);
 					this.markTransientsError(q_suggestions, `Could not save edit: ${e.message || e}`);
 				}
 
-				// Loading newly related items is read-only. Skip it when the user has
-				// moved on to another family; the write itself already happened.
-				if (to_load.length > 0 && appState.items.includes(q)) {
+				// A relation is written on both people: the reciprocal statement lands on
+				// the other person's item, so a relation entered from this card can make
+				// that person (q) a newcomer to the family, while a statement here can
+				// point at a target not yet shown. Add such people so the new relation
+				// appears without reloading the page. Skip this when the user has moved
+				// on to another family; the write itself already happened.
+				const adds_relation = q_suggestions.some((s) => relation_properties.includes(s.prop));
+				const new_subject = saved && adds_relation && !appState.items.includes(q);
+				if (saved && appState.main_q === main_q && (new_subject || to_load.length > 0)) {
 					try {
-						await this.loadDirectRelations(to_load);
+						if (to_load.length > 0) await this.loadDirectRelations(to_load);
+						if (appState.main_q !== main_q) return;
+						if (new_subject && wd.getItem(q) !== undefined) addItem(q);
+						for (const target_q of to_load) {
+							if (wd.getItem(target_q) !== undefined) addItem(target_q);
+						}
 						numericSortItems(appState.items);
 						const nonBusyItems = appState.items.filter((iq) => !(this.is_busy[iq] > 0));
 						await wd.getItemBatch(nonBusyItems);
@@ -954,7 +970,8 @@ const MainPage = Vue.extend({
 		},
 		// One queued claim write: re-read the live item, add only the claims that
 		// are still missing, and apply the response to the shared cache. Returns
-		// the relation targets to load afterwards (none on a no-op or an error).
+		// whether the relations exist now (`saved`) plus the relation targets to
+		// load afterwards so newly connected people can be shown.
 		async writeClaimsFor(q, q_suggestions, source_url) {
 			let live;
 			try {
@@ -962,13 +979,13 @@ const MainPage = Vue.extend({
 			} catch (e) {
 				this.addError(`Could not verify live Wikidata state for ${q}: ${e.message || e}`);
 				this.markTransientsError(q_suggestions, `Could not verify live Wikidata state: ${e.message || e}`);
-				return { to_load: [] };
+				return { saved: false, to_load: [] };
 			}
 			if (live) this.updateItemRaw(q, live);
 			const claimsToAdd = q_suggestions.filter((s) => !liveHasClaim(live, s.prop, s.to));
 			if (claimsToAdd.length === 0) {
 				this.markTransientsSaved(q_suggestions, []);
-				return { to_load: [] };
+				return { saved: true, to_load: [] };
 			}
 
 			const data = {
@@ -983,19 +1000,19 @@ const MainPage = Vue.extend({
 			} catch (e) {
 				this.addError(`Could not start edit on ${q}: ${e.message || e}`);
 				this.markTransientsError(q_suggestions, `Could not start edit: ${e.message || e}`);
-				return { to_load: [] };
+				return { saved: false, to_load: [] };
 			}
 
 			if (d?.error !== 'OK' || d?.status !== 'OK') {
 				const msg = `${d?.error || ''} / ${d?.status || ''}`.trim();
 				this.reportEditError(`Could not save edit to ${q}`, msg);
 				this.markTransientsError(q_suggestions, msg);
-				return { to_load: [] };
+				return { saved: false, to_load: [] };
 			}
 
 			this.updateItemRaw(q, d.res.entity);
 			this.markTransientsSaved(q_suggestions, claimsToAdd);
-			return { to_load };
+			return { saved: true, to_load };
 		},
 		statementFor(s) {
 			const statement = {
