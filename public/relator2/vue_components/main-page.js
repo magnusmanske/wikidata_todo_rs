@@ -163,6 +163,10 @@ const MainPage = Vue.extend({
 	data() {
 		return {
 			loading: false,
+			// Guards the asynchronous family load: a load may finish after the
+			// user has already navigated elsewhere, and must then be ignored.
+			load_token: 0,
+			loaded_main_q: '',
 			new_q: '',
 			invalid_q: '',
 			suggestions: [],
@@ -277,30 +281,86 @@ const MainPage = Vue.extend({
 		},
 
 		async loadRelatives() {
+			const token = ++this.load_token;
+			const main_q = appState.main_q;
+			const fresh = () => token === this.load_token && appState.main_q === main_q;
+
+			// Derived suggestions are rebuilt below; rows the user added by hand are
+			// kept until saved or rejected. A different main item starts a new family.
+			if (this.loaded_main_q !== main_q) this.suggestions = this.suggestions.filter((s) => s.transient);
+			this.loaded_main_q = main_q;
+
 			try {
-				addItem(this.main_q);
-				const titles = await searchRelativesOf(this.main_q);
-				resetItems(titles);
-				addItem(this.main_q);
-				await this.loadDirectRelations(appState.items);
+				addItem(main_q);
+
+				// Show the main person and any already-cached relatives before the
+				// (slow) relatives search returns. On a cold load, fetch just the main
+				// item alongside the search so their card still appears first.
+				let titles_error;
+				const titlesP = searchRelativesOf(main_q).catch((e) => { titles_error = e; return []; });
+				if (getWd().getItem(main_q) === undefined) {
+					try {
+						await getWd().getItemBatch([main_q]);
+					} catch { /* the full load below reports the failure */ }
+				}
+				if (!fresh()) return;
+				if (this.showCachedFamily(main_q)) {
+					this.loading = false;
+					this.scrollToMainItem();
+				}
+
+				const titles = await titlesP;
+				if (titles_error) throw titles_error;
+				if (!fresh()) return;
+
+				// Merge rather than reset: the preview above, and anything the user did
+				// while the search ran, must survive until the final prune below. The
+				// load set stays titles + main so the same relatives are followed as before.
+				const load_items = [...titles];
+				if (!load_items.includes(main_q)) load_items.push(main_q);
+				for (const q of load_items) addItem(q);
+				await this.loadDirectRelations(load_items);
+				if (!fresh()) return;
 				numericSortItems(appState.items);
 				const loaded = await getWd().getItemBatch(appState.items);
+				if (!fresh()) return;
 				recomputeItemRelations(loaded);
-				const kept = connectedItems(appState.items, appState.item_relations, this.main_q);
+				const kept = connectedItems(appState.items, appState.item_relations, main_q);
 				if (kept.length !== appState.items.length) resetItems(kept);
 				this.initializeIsBusy();
-				this.generateSuggestions();
+				if (!this.isBusy()) this.generateSuggestions();
 				this.render();
 			} catch (err) {
-				this.addError(`Loading relatives failed: ${err.message || err}`);
+				if (fresh()) this.addError(`Loading relatives failed: ${err.message || err}`);
 			} finally {
-				this.loading = false;
-				// The person cards only enter the DOM once `loading` is false, so
-				// bring the main item into view after that flush. This covers both
-				// a fresh page load and clicking a ⌖ icon (which navigates to a new
-				// main item and re-runs init → loadRelatives via the $route watch).
-				this.scrollToMainItem();
+				if (fresh()) {
+					this.loading = false;
+					// The person cards only enter the DOM once `loading` is false, so
+					// bring the main item into view after that flush. This covers both
+					// a fresh page load and clicking a ⌖ icon (which navigates to a new
+					// main item and re-runs init → loadRelatives via the $route watch).
+					this.scrollToMainItem();
+				}
 			}
+		},
+		// A first view built from the shared item cache: the main person plus the
+		// relatives their own statements point at that are already loaded. It is
+		// replaced by the complete family once the search and batch loads finish.
+		showCachedFamily(main_q) {
+			const wd = getWd();
+			const item = wd.getItem(main_q);
+			if (item === undefined) return false;
+			const items = [main_q];
+			for (const prop of relation_properties) {
+				for (const q of liveRelationItems(item, prop)) {
+					if (!items.includes(q) && wd.getItem(q) !== undefined) items.push(q);
+				}
+			}
+			resetItems(items);
+			recomputeItemRelations(items);
+			numericSortItems(appState.items);
+			this.render();
+			return true;
 		},
 		// Scroll the main item's card into view if it isn't already fully visible.
 		// Runs on the next tick so the just-rendered cards are in the DOM, and
@@ -538,7 +598,12 @@ const MainPage = Vue.extend({
 				.filter((s) => !isImpossibleRelation(s))
 				.filter((s) => !isRejected(s));
 			const transient = this.suggestions.filter((s) => s.transient);
-			const next = [...transient];
+			// Keep relations the user entered but has not saved/rejected yet. A
+			// background refresh (for example one that finishes while the family is
+			// still loading) must not silently discard that pending action.
+			const manual = this.suggestions.filter((s) =>
+				!s.transient && s.manual && !isRejected(s) && !this.doesSuggestionExist(s));
+			const next = [...transient, ...manual];
 			for (const o of fresh) if (!this.doesSuggestionExist(o, next)) next.push(o);
 			this.suggestions = next;
 		},
@@ -678,6 +743,9 @@ const MainPage = Vue.extend({
 			const additions = [];
 			for (const o of events) {
 				o.suggestion = true;
+				// Composed in the UI (unlike the derived suggestions rebuilt by
+				// generateSuggestions), so preserve it across background refreshes.
+				o.manual = true;
 				if (this.doesSuggestionExist(o, sofar)) continue;
 				sofar.push(o);
 				additions.push(o);
@@ -940,6 +1008,11 @@ const MainPage = Vue.extend({
 					this.markTransientsError(q_suggestions, `Could not save edit: ${e.message || e}`);
 				}
 
+				// The write is confirmed (or has failed); free the card now. The
+				// remaining work only loads people the new relation connects, and
+				// must not make a finished save look like it is still running.
+				release();
+
 				// A relation is written on both people: the reciprocal statement lands on
 				// the other person's item, so a relation entered from this card can make
 				// that person (q) a newcomer to the family, while a statement here can
@@ -948,7 +1021,13 @@ const MainPage = Vue.extend({
 				// on to another family; the write itself already happened.
 				const adds_relation = q_suggestions.some((s) => relation_properties.includes(s.prop));
 				const new_subject = saved && adds_relation && !appState.items.includes(q);
-				if (saved && appState.main_q === main_q && (new_subject || to_load.length > 0)) {
+				// Only show people in the family currently on screen. A write that lands
+				// after the user has navigated elsewhere must still reach Wikidata, but
+				// must not pull its people into the new family (e.g. the marriage mirror
+				// of a just-created item).
+				const touches_view = appState.items.includes(q)
+					|| q_suggestions.some((s) => appState.items.includes(s.to));
+				if (saved && appState.main_q === main_q && touches_view && (new_subject || to_load.length > 0)) {
 					try {
 						if (to_load.length > 0) await this.loadDirectRelations(to_load);
 						if (appState.main_q !== main_q) return;
@@ -957,7 +1036,10 @@ const MainPage = Vue.extend({
 							if (wd.getItem(target_q) !== undefined) addItem(target_q);
 						}
 						numericSortItems(appState.items);
-						const nonBusyItems = appState.items.filter((iq) => !(this.is_busy[iq] > 0));
+						// q is no longer busy, but must not be re-read here: its cache
+						// already holds the response just written, and a stale replica
+						// read could undo the change locally.
+						const nonBusyItems = appState.items.filter((iq) => iq !== q && !(this.is_busy[iq] > 0));
 						await wd.getItemBatch(nonBusyItems);
 						bus.$emit('refresh-view');
 					} catch (e) {
@@ -1306,20 +1388,17 @@ const MainPage = Vue.extend({
 			try {
 				const q = d.res.entity.id;
 				this.updateItemRaw(q, d.res.entity);
-				// The instance that started the job is still the page on screen, so
-				// add the new person to its view and redraw directly. Only a job whose
-				// page has gone (route change) needs the live instance via the bus.
-				if (!this.unmounted) {
-					if (job.main_q !== appState.main_q) {
-						console.warn('relator2: creation finished after the view changed', job.main_q, appState.main_q);
-					}
+				// The new item is in the shared cache either way, but add it to the view
+				// only if that view still belongs to the family it was created for; a
+				// route change must not pull it into another person's tree. A job whose
+				// page has gone redraws the live instance via the bus.
+				if (job.main_q === appState.main_q) {
 					addItem(q);
 					numericSortItems(appState.items);
-					this.refreshView(q);
-				} else if (job.main_q === appState.main_q) {
-					addItem(q);
-					numericSortItems(appState.items);
-					bus.$emit('refresh-view', q);
+					if (this.unmounted) bus.$emit('refresh-view', q);
+					else this.refreshView(q);
+				} else {
+					console.warn('relator2: creation finished after the view changed', job.main_q, appState.main_q);
 				}
 				this.dismissCreationJob(job.id);
 				// When a marriage date was supplied for a spouse, write the

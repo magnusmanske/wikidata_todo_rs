@@ -21,9 +21,22 @@ setToolName('relator2');
 setWd(wd);
 setWidarApiUrl('./api.php');
 
-await initToolTranslate('relator');
 loadRejected();
-await wd.getItemBatch([...new Set([...relation_properties, ...fallbackDropPropertyIds()])]);
+// Prefetch the person named in the initial URL in the same request as the
+// property labels, so MainPage can render their card immediately from cache.
+// The router is in hash mode, hence reading the hash rather than the path.
+const initial_q = (window.location.hash.split('?')[0].match(/\/(Q\d+)\/?$/i) || [])[1]?.toUpperCase();
+const initial_items = [...new Set([
+    ...relation_properties,
+    ...fallbackDropPropertyIds(),
+    ...(initial_q ? [initial_q] : []),
+])];
+// Translations and property labels are independent, so start both requests
+// together instead of waiting for one before the other.
+await Promise.all([
+    initToolTranslate('relator'),
+    wd.getItemBatch(initial_items),
+]);
 
 const router = new VueRouter({
     routes: [
